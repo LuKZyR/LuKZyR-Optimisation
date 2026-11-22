@@ -1,8 +1,5 @@
 # HelixFlux-Optimisation
 Optimisation Windows sûre – by Lukzyr
-====================================================
-           LUKZYR OPTIMISATION  v0.1 bêta
-=====================================================
 
 VERSION BÊTA
   C'est la première version publique : v0.1 bêta (version interne 5.3). Elle a été
@@ -135,10 +132,3 @@ CHANGER LE LOGO
        « Lukzyr Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
-
-
-
-NOUVEAUTÉS v3.1
-  - Page BIOS : guide personnalisé selon la carte mère détectée (MSI, ASUS,
-    Gigabyte/AORUS, ASRock, Biostar, NZXT, PC de marque et portables).
-  - Avertit si la RAM tourne sous sa vitesse annoncée (XMP/EXPO désactivé).
