@@ -85,30 +85,7 @@ TOUT ANNULER (bouton en bas de chaque section, Système > Réparation et sécuri
   installées, Edge désinstallé, fichiers temporaires effacés, réparation DISM/SFC.
   Pour ça : Système > Restaurer le système (point de restauration).
 
-MISE À JOUR DE L'APPLI (facultatif)
-  Au démarrage, l'appli vérifie en arrière-plan un petit fichier version.json
-  (jamais bloquant ; hors ligne, rien ne change). Sans adresse configurée, Paramètres
-  affiche simplement « Aucun serveur de mise à jour configuré ».
-  Si une version plus récente existe, une alerte du Tableau de bord (et un bandeau
-  dans les sections) propose de télécharger le zip
-  sur le Bureau (le dossier s'ouvre ; l'appli ne se remplace jamais toute seule).
 
-  Pour l'activer, par exemple avec GitHub :
-    1. Crée un dépôt public (ex. lukzyr-optimisation) et publie le zip dans une
-       « Release » (ex. tag v0.2, fichier Lukzyr-Optimisation-v0.2.zip).
-    2. Ajoute à la racine du dépôt un fichier version.json :
-         {
-           "version": "0.2",
-           "url": "https://github.com/TON-PSEUDO/lukzyr-optimisation/releases/download/v0.2/Lukzyr-Optimisation-v0.2.zip",
-           "notes": "Corrections et nouveautés"
-         }
-    3. Donne l'adresse « raw » de ce fichier à l'appli, au choix :
-       - dans C:\ProgramData\Lukzyr\config.json :
-           { "urlMiseAJour": "https://raw.githubusercontent.com/TON-PSEUDO/lukzyr-optimisation/main/version.json" }
-       - ou en haut de scripts\Lukzyr-Optimisation.ps1 : $UrlMiseAJourDefaut = "https://..."
-    À chaque nouvelle version : publie le zip, puis change "version" et "url".
-    Numéros acceptés : "0.1.1", "0.2", "0.2-beta"... (v0.1 bêta = 0.1.0). Une version
-    finale "0.1" est proposée aux utilisateurs de la 0.1 bêta ; "0.1-beta" ne l'est pas.
 
 RÉGLAGES DE L'APPLI
   Animations, thème et langue sont mémorisés dans HKCU\Software\Lukzyr
