@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.14",
+  "build": "5.15",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.14) : nouvelles pages Système > Réparer (réglages nuisibles laissés par d'autres optimiseurs, tâches planifiées d'autres éditeurs) et Matériel > Diagnostic (dual channel, PCIe, chipset AMD, X3D, Windows pour Ryzen, jeux sur HDD, FreeSync / G-Sync), mode « Meilleures performances », carte graphique par jeu, Optimiser les lecteurs ; correctifs : DNS de « Tout annuler », hibernation sur portable, point de restauration, relance de la session de jeu.",
-  "sha256": "75e65a8372600de0d42a97505657de063300eb06140fc696221e06ab56be8d34"
+  "notes": "v0.1 bêta (build 5.15) : animations fluides (environ 60 images/s au lieu de 30), démarrage plus rapide (interface mise en cache), fenêtre qui tient sur un écran 1024 px ; correctifs : « Appliquer ce DNS » avec une seule carte réseau, page Espace disque (liste et barres), critère Espace libre du score.",
+  "sha256": "eb7c623cce25bdfabd4452498761690c72598752d7b725b3f1157cf86fc9da1e"
 }
