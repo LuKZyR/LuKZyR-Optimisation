@@ -1,0 +1,308 @@
+=====================================================
+           HELIXFLUX OPTIMISATION  v0.1 bêta
+=====================================================
+
+VERSION BÊTA
+  C'est la première version publique : v0.1 bêta (version interne 5.5). Elle a été
+  testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
+  « Exporter le journal », puis envoie le fichier avec une description du problème.
+  Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
+  versions de travail).
+
+DÉMARRAGE
+  1. Dézippe tout le dossier (ne lance pas depuis le zip).
+  2. Double-clique sur "HelixFlux Optimisation.exe" (ou, en secours,
+     sur "LANCER - HelixFlux Optimisation.bat").
+  3. Accepte la demande administrateur.
+  4. L'exe n'est pas signé numériquement : SmartScreen ou ton antivirus peuvent
+     afficher un avertissement. SmartScreen : "Informations complémentaires" >
+     "Exécuter quand même". Le code source de l'exe est dans assets\source-lanceur\
+     (il ne fait que lancer scripts\HelixFlux-Optimisation.ps1 en administrateur).
+
+L'INTERFACE (onglets en haut)
+  TABLEAU DE BORD
+    « Optimiser en 1 clic » : choisis un profil (Gaming max, Équilibré, PC portable ;
+    PC portable est conseillé automatiquement si une batterie est détectée : il garde
+    le plan d'alimentation équilibré et l'hibernation), puis clique sur le gros bouton
+    OPTIMISER : point de restauration + sauvegarde des réglages + application du profil
+    (le bouton pulse pendant l'exécution). Seuls les réglages du profil sont appliqués
+    (pas les applis ni les pilotes).
+    Jauges en direct (processeur, mémoire, disque C:).
+    Alertes réelles : applis lourdes au démarrage, date de la dernière optimisation
+    (+ lien « Tout annuler »), santé des disques / espace libre, nouvelle version.
+    Tuiles vers chaque section.
+
+  PERFORMANCE   Jeu (Mode Jeu, priorité aux jeux, planification GPU, souris sans
+                accélération, optimisations des jeux en fenêtre, optimisations VRR),
+                processeur et alimentation (plan Utilisation normale OU Performances
+                élevées, hibernation), mémoire et sécurité (VBS), affichage
+                (transparence), démarrage et arrière-plan (applis de démarrage sans
+                délai, Edge sans préchargement, applis du Store en arrière-plan).
+                En bas : VÉRIFICATIONS (rien n'est modifié) : fréquence de l'écran,
+                Resizable BAR / Smart Access Memory, Radeon Anti-Lag, Ne pas déranger
+                en jeu, indexation de la recherche, effets d'animation de Windows,
+                chacune avec un bouton vers le bon réglage.
+  NETTOYAGE     Windows plus léger (débloat, Copilot, OneDrive, Edge), confidentialité
+                (télémétrie, Optimisation de la distribution), fichiers (temporaires,
+                assistant de stockage, nettoyage des composants Windows (WinSxS),
+                outil Nettoyage de disque).
+  APPLICATIONS  Jeux : Steam, Epic Games, Ubisoft Connect, Rockstar Games, EA app,
+                Battle.net, GOG Galaxy. Communication et musique : Discord, Spotify.
+                Navigateurs : Brave. Création et utilitaires : OBS Studio, 7-Zip, VLC.
+                Entretien : mise à jour des autres applis.
+                (EA app, Battle.net, GOG Galaxy, 7-Zip, VLC, OBS : décochés par défaut.)
+  SYSTÈME       Démarrage : applis lancées avec Windows (éditeur, impact estimé),
+                activables / désactivables comme dans le Gestionnaire des tâches ;
+                les logiciels de sécurité ne sont jamais modifiables.
+                Réseau : DNS actuel ; Automatique (FAI), Cloudflare, Google ou Quad9
+                (IPv4 + IPv6) ; « Vider le cache DNS ».
+                Réparation et sécurité : TRIM des SSD, réparation DISM + SFC,
+                « Tout annuler », Restaurer le système, Gestionnaire de périphériques,
+                Redémarrer le PC.
+  MATÉRIEL      Mon PC (composants détectés), Pilotes officiels, Santé (disques,
+                espace libre, température, mémoire, alertes), Guide BIOS personnalisé
+                pour TA carte mère (exporter, page support, redémarrer dans le BIOS ;
+                rien n'est jamais modifié dans le BIOS ; texte du guide en français).
+  JOURNAL       Ce qui se passe, en direct.
+  PARAMÈTRES    (roue dentée) Thème clair, Langue FR / EN, Animations,
+                Animations réduites, Mise à jour de l'appli, À propos.
+
+  Chaque option a un badge :
+    SÛR        sans danger, remis par « Tout annuler »
+    AVANCÉ     à comprendre avant (VBS, Copilot, OneDrive, réparation DISM/SFC)
+    DÉFINITIF  ne peut pas être annulé (désinstallation d'Edge)
+  Activer une option AVANCÉ ou DÉFINITIF à la main demande une confirmation, et le
+  récapitulatif avant application les liste à part.
+
+  Dans une section : active les interrupteurs voulus (clique n'importe où sur la
+  carte), puis APPLIQUER (en bas). Une seule fenêtre récapitule ce qui va être fait.
+  Tout se déroule en arrière-plan, sans fenêtre noire, et s'affiche dans Journal.
+  Redémarre le PC à la fin.
+
+TOUT ANNULER (bouton en bas de chaque section, Système > Réparation et sécurité,
+              ou lien sur le Tableau de bord)
+  Avant chaque application, la valeur D'ORIGINE de chaque réglage modifié est
+  enregistrée dans C:\ProgramData\Lukzyr\sauvegarde-reglages.json (registre,
+  démarrage des services, plan d'alimentation, hibernation, TRIM, DNS, applis au
+  démarrage). Si tu appliques plusieurs fois, la toute première valeur est gardée.
+  « Tout annuler » affiche la liste de ce qui va être remis, puis restaure tout
+  à l'identique (une valeur qui n'existait pas est supprimée).
+  NE PEUVENT PAS être annulés : applis supprimées (débloat, Copilot, OneDrive) ou
+  installées, Edge désinstallé, fichiers temporaires effacés, réparation DISM/SFC.
+  Pour ça : Système > Restaurer le système (point de restauration).
+
+MISE À JOUR DE L'APPLI (facultatif)
+  Au démarrage, l'appli vérifie en arrière-plan un petit fichier version.json
+  (jamais bloquant ; hors ligne, rien ne change). Sans adresse configurée, Paramètres
+  affiche simplement « Aucun serveur de mise à jour configuré ».
+  Si une version plus récente existe, une alerte du Tableau de bord (et un bandeau
+  dans les sections) propose de télécharger le zip
+  sur le Bureau (le dossier s'ouvre ; l'appli ne se remplace jamais toute seule).
+
+  Pour l'activer, par exemple avec GitHub :
+    1. Crée un dépôt public (ex. helixflux-optimisation) et publie le zip dans une
+       « Release » (ex. tag v0.2, fichier HelixFlux-Optimisation-v0.2.zip).
+    2. Ajoute à la racine du dépôt un fichier version.json :
+         {
+           "version": "0.2",
+           "url": "https://github.com/TON-PSEUDO/helixflux-optimisation/releases/download/v0.2/HelixFlux-Optimisation-v0.2.zip",
+           "notes": "Corrections et nouveautés"
+         }
+    3. Donne l'adresse « raw » de ce fichier à l'appli, au choix :
+       - dans C:\ProgramData\Lukzyr\config.json :
+           { "urlMiseAJour": "https://raw.githubusercontent.com/TON-PSEUDO/helixflux-optimisation/main/version.json" }
+       - ou en haut de scripts\HelixFlux-Optimisation.ps1 : $UrlMiseAJourDefaut = "https://..."
+    À chaque nouvelle version : publie le zip, puis change "version" et "url".
+    Numéros acceptés : "0.1.1", "0.2", "0.2-beta"... (v0.1 bêta = 0.1.0). Une version
+    finale "0.1" est proposée aux utilisateurs de la 0.1 bêta ; "0.1-beta" ne l'est pas.
+
+RÉGLAGES DE L'APPLI
+  Animations, thème et langue sont mémorisés dans HKCU\Software\Lukzyr
+  (Animations, AnimationsReduites, Theme, Langue). Par défaut : animations
+  activées, thème sombre, langue de Windows (français sinon anglais).
+  Si les « Effets d'animation » sont coupés dans Windows (Accessibilité > Effets
+  visuels), l'appli n'anime rien, quel que soit son propre réglage.
+  Ces dossiers gardent le nom « Lukzyr » (HKCU\Software\Lukzyr, C:\ProgramData\Lukzyr)
+  même après le changement de nom de l'appli : rien à migrer, « Tout annuler »
+  retrouve les sauvegardes faites avec les versions précédentes.
+
+SÉCURITÉ
+  - Un point de restauration "Avant HelixFlux Optimisation" est créé avant de commencer.
+  - Les réglages d'origine sont sauvegardés : « Tout annuler ».
+  - Store, Xbox, Defender, Windows Update et pilotes ne sont jamais touchés
+    (aucun pilote n'est supprimé).
+  - Le journal de chaque exécution est gardé dans C:\ProgramData\Lukzyr\
+    (Paramètres > À propos > « Ouvrir les journaux », ou Journal > « Ouvrir le dossier
+    des journaux » ; le dossier est créé s'il n'existe pas).
+
+TEMPÉRATURE (Matériel > Santé)
+  L'appli essaie, dans l'ordre : LibreHardwareMonitor / OpenHardwareMonitor s'ils
+  tournent, puis les capteurs que Windows expose (zone thermique, ACPI). Les valeurs
+  impossibles (27,8 °C fixe, moins de 15 °C, plus de 115 °C) sont ignorées et la source
+  est affichée sous la mesure.
+  Beaucoup de PC (notamment les processeurs AMD Ryzen) ne donnent PAS leur température
+  à Windows : la carte l'explique et propose « Installer LibreHardwareMonitor »
+  (gratuit, open source, installé avec winget depuis le dépôt officiel, seulement si tu
+  confirmes). Ensuite : ouvre LibreHardwareMonitor, Options > Remote Web Server > Run
+  (port 8085), puis Actualiser dans Santé : températures processeur ET carte graphique.
+  Bon à savoir : LibreHardwareMonitor utilise son propre pilote de capteurs, que
+  certains antivirus (dont Defender) peuvent signaler. HelixFlux n'installe jamais de pilote
+  lui-même, n'en fournit aucun et ne touche pas à l'antivirus.
+
+CONTENU DU DOSSIER
+  HelixFlux Optimisation.exe            Lance l'interface (demande les droits admin)
+  LANCER - HelixFlux Optimisation.bat   Lanceur de secours
+  scripts\                           Scripts PowerShell (+ Mode-console.bat sans interface,
+                                     qui propose aussi le guide BIOS personnalisé)
+  guides\Guide-BIOS.txt              Guide BIOS générique (secours)
+  assets\helixflux.ico                  Icône (fenêtre + exe)
+  assets\logo.png                    Logo de l'en-tête
+  assets\source-lanceur\             Source du lanceur .exe + Compiler-Lanceur.bat
+                                     (+ logo original et logo détouré haute définition)
+
+CHANGER LE LOGO
+  Le logo n'existe qu'à un seul endroit : le dossier assets.
+    1. Remplace assets\logo.png (carré, 256 x 256 conseillé, fond transparent)
+       et assets\helixflux.ico (icône Windows : 16, 32, 48, 64, 128 et 256 px).
+       La fenêtre et l'en-tête les utilisent directement.
+    2. Pour l'icône de l'exe (elle est intégrée au fichier) : double-clique sur
+       assets\source-lanceur\Compiler-Lanceur.bat. Il recompile
+       « HelixFlux Optimisation.exe » avec le compilateur C# fourni avec Windows
+       (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
+       icône en cache quelques minutes.
+
+NOUVEAUTÉS v0.1 bêta — HelixFlux (version interne 5.5)
+  - L'appli s'appelle maintenant HelixFlux Optimisation (by Lukzyr), avec un nouveau
+    logo (H dégradé bleu-violet) : fenêtre, écran de chargement, exe, À propos.
+    Les réglages, journaux et sauvegardes restent dans HKCU\Software\Lukzyr et
+    C:\ProgramData\Lukzyr : « Tout annuler » fonctionne avec les sauvegardes faites
+    par l'ancienne version (avant le changement de nom). L'ancien dossier de l'appli
+    peut être supprimé.
+  - Nouveaux réglages, tous remis par « Tout annuler » : optimisations des jeux en
+    fenêtre, optimisations VRR, applis de démarrage sans délai, Edge sans préchargement
+    (si Edge est installé), plan « Utilisation normale » (profil Équilibré et PC
+    portable ; conseillé pour Ryzen), applis du Store en arrière-plan (décoché, peut
+    retarder certaines notifications).
+  - Nettoyage des composants Windows (WinSxS) : décoché par défaut, sans /ResetBase
+    (les mises à jour restent désinstallables).
+  - Plan « Performances élevées » au lieu de « Performances optimales », avec un texte
+    honnête : gain faible (0 à 2 %).
+  - Section VÉRIFICATIONS (page Performance) : lecture seule + bouton vers le réglage.
+  - Animations plus douces (apparition échelonnée des éléments, dégradé du logo sur
+    les barres) mais plus économes : un seul minuteur qui s'arrête dès que rien ne
+    bouge, rien au repos, pause quand la fenêtre est réduite ou inactive, réglage
+    Windows respecté, option « Animations réduites ». Jauges du tableau de bord lues
+    seulement quand il est affiché ; plus de lecture de la carte graphique en boucle.
+
+NOUVEAUTÉS v0.1 bêta — interface épurée (version interne 5.4)
+  - Interface plus légère : moins d'encadrés et de décorations, plus d'espace, une seule
+    couleur d'accent (violet) ; l'orange et le rouge ne servent plus qu'aux mises en garde.
+  - Tableau de bord recentré sur l'essentiel : le choix du profil, le bouton OPTIMISER,
+    trois infos clés (processeur, mémoire, disque système) et trois lignes d'état.
+    Les raccourcis vers les sections passent par les onglets du haut.
+  - Moins de tailles et de couleurs de texte, icônes fines sans
+    pastilles colorées, sous-pages en simple texte.
+  - Animations conservées mais plus discrètes (glissement de page court, pas de halo).
+  - Aucun changement dans ce que l'appli modifie sur Windows ; thèmes clair/sombre et
+    français/anglais inchangés.
+
+NOUVEAUTÉS v0.1 bêta (version interne 5.3)
+  - Écran de chargement corrigé : sur certains PC rapides il pouvait rester au premier
+    plan, figé (ex. « Prêt 65 % »), devant la fenêtre. Il est maintenant indépendant de
+    PowerShell et se ferme par plusieurs chemins (dès que la fenêtre principale est
+    visible, au plus tard 2 s après, à la fermeture de l'appli, et sécurité de 3 s). La
+    barre finit toujours à 100 % puis s'efface en fondu, sans flash du Bureau.
+  - « Ouvrir les journaux » / « Ouvrir le dossier des journaux » : crée le dossier s'il
+    manque, l'ouvre dans l'Explorateur, et affiche un message clair (chemin copié) si
+    Windows n'a pas ouvert la fenêtre. « Exporter le journal » : message en cas d'erreur.
+  - Température : plusieurs sources + explication + LibreHardwareMonitor en option
+    (voir TEMPÉRATURE). Température de la carte graphique si disponible.
+  - Mon PC : vraie quantité de mémoire vidéo (au-delà de 4 Go, ex. RX 7600 8 Go), carte
+    graphique dédiée affichée en premier.
+  - Windows 11 23H2 / 24H2 : suppression de l'appli Copilot fiabilisée (appli par appli,
+    composants système laissés en place, ne revient pas pour les nouveaux comptes).
+  - Animations plus fluides : glissement des pages adouci, halo au survol des cartes,
+    onde douce et anneau de progression autour du bouton OPTIMISER, alertes en fondu.
+    Toujours désactivables (Paramètres > Animations).
+  - Badge « BÊTA » à côté de HELIXFLUX, numéro v0.1 bêta partout (écran de chargement,
+    À propos, propriétés de l'exe : version 0.1.0.0 / 0.1.0-beta).
+  - Coins arrondis sous Windows 11 pour les écrans de chargement.
+
+NOUVEAUTÉS v5.2
+  - Écran de chargement dès le double-clic : logo, HELIXFLUX, cercle qui tourne, barre de
+    progression avec pourcentage et l'étape en cours (Détection du processeur, Carte
+    graphique, Carte mère, Mémoire, Disques, Préparation de l'interface...). Il ne se fige
+    jamais (il tourne à part), suit le thème clair / sombre et la langue, puis s'efface en
+    fondu quand la fenêtre apparaît. Le lanceur « HelixFlux Optimisation.exe » l'affiche
+    lui aussi tout de suite. Si une détection échoue, l'appli s'ouvre quand même (détail
+    dans le Journal).
+  - Nouvelles icônes partout : un seul jeu cohérent (traits arrondis, même épaisseur),
+    dessinées en vectoriel donc nettes à 100, 125 et 150 % : onglet Paramètres, boutons
+    thème / réduire / fermer, tuiles et cartes du Tableau de bord, alertes, options,
+    badges SÛR / AVANCÉ / DÉFINITIF, recherche, résumé, bouton « Tout annuler ».
+    Pastilles colorées assorties au violet, en thème clair comme en sombre.
+  - Le logo de l'appli et de l'exe ne change pas : il se remplace toujours dans assets.
+
+NOUVEAUTÉS v5.1
+  - Onglets instantanés : le soulignement et l'onglet actif suivent le clic tout de suite.
+    Les lectures lentes (applis au démarrage, tâches planifiées, santé des disques,
+    alertes du Tableau de bord) se font maintenant en arrière-plan : la fenêtre ne se
+    fige plus, un message « Lecture... » s'affiche le temps de les faire.
+  - OPTIMISER : barre de progression et étape en cours dans le bandeau
+    (« Étape 3/5 · ... »), puis une fenêtre de résumé : nombre de réglages appliqués,
+    durée, liste des réglages, erreurs éventuelles, et choix « Redémarrer maintenant »
+    ou « Plus tard » (plus de redémarrage sans le demander).
+  - Compteurs clairs : « 15 réglages » sur le profil = 15 réglages dans le résumé.
+    Le compteur du bas sépare réglages, applis et pilotes.
+  - Recherche d'un réglage (en haut à droite ou Ctrl+F) : tape « télémétrie »,
+    « souris », « DNS »... puis Entrée pour aller directement à l'option.
+  - Bulles d'aide sur les options et sur les badges SÛR / AVANCÉ / DÉFINITIF.
+  - Journal : messages d'erreur plus clairs, bouton « Exporter le journal » (fichier
+    texte sur le Bureau, avec la config du PC) et « Ouvrir le dossier des journaux ».
+  - L'appli rouvre la dernière page et à la même place sur l'écran.
+  - Interface : thème clair plus lisible (gris et couleurs plus contrastés), dessin
+    sans scintillement, titres jamais coupés (en anglais aussi), fenêtre réduite
+    automatiquement si l'écran est petit avec la mise à l'échelle 125 / 150 %.
+
+NOUVEAUTÉS v5.0
+  - Nouvelle interface : onglets en haut avec soulignement animé, Tableau de bord avec
+    « Optimiser en 1 clic » (profil + gros bouton OPTIMISER qui pulse), jauges, alertes
+    réelles et tuiles vers chaque section.
+  - Options reclassées en 8 sections : Tableau de bord, Performance, Nettoyage et
+    confidentialité, Applications, Système, Matériel, Journal, Paramètres (la page Outils
+    disparaît : ses boutons sont rangés là où on les cherche).
+  - Badges SÛR / AVANCÉ / DÉFINITIF sur chaque option, avec confirmation pour AVANCÉ et
+    DÉFINITIF.
+  - Télémétrie séparée du débloat : interrupteur « Réduire la télémétrie » dans
+    Confidentialité (annulable avec « Tout annuler »).
+  - Logo remplaçable en un seul endroit (assets) + Compiler-Lanceur.bat pour l'exe.
+
+NOUVEAUTÉS v4.0
+  - « Tout annuler » : vraie annulation des réglages (sauvegarde JSON des valeurs d'origine).
+  - Profils en un clic : Gaming max, Équilibré, PC portable (conseillé sur portable).
+  - Mise à jour de l'appli : vérification d'un version.json, bandeau + téléchargement.
+  - Nouvelle page Démarrage : activer / désactiver les applis lancées avec Windows.
+  - Nouvelle page Réseau : DNS (Automatique, Cloudflare, Google, Quad9) + vider le cache.
+  - Nouvelle page Santé : disques, espace libre, température, mémoire, alertes.
+  - Applications : EA app, Battle.net, GOG Galaxy, 7-Zip, VLC, OBS Studio, en sections.
+  - Thème clair / sombre (Outils ou bouton soleil en haut), changé en direct.
+  - Interface en anglais (Outils > Langue ; par défaut la langue de Windows).
+  - Vrai lanceur « HelixFlux Optimisation.exe » avec l'icône (le .bat reste en secours).
+
+NOUVEAUTÉS v3.2
+  - Interface animée, légère et fluide : ouverture/fermeture en fondu,
+    indicateur violet qui glisse vers la page active, survols en douceur,
+    changement de page en glissé, interrupteurs qui glissent, barres et
+    chiffres qui défilent, bouton APPLIQUER qui pulse pendant l'exécution.
+  - Optimisation : nouveau réglage « Désactiver l'Optimisation de la distribution »
+    (Windows ne partage plus tes mises à jour avec d'autres PC ; Windows Update
+    continue de fonctionner normalement).
+  - Outils > Animations : les couper pour un PC lent (le choix est mémorisé).
+    Par défaut, suit le réglage Windows « Afficher les animations ».
+  - Spotify s'installe aussi quand le Contrôle de compte (UAC) est désactivé
+    (lancement avec des droits normaux, l'installeur Spotify refusant l'admin).
+
+NOUVEAUTÉS v3.1
+  - Page BIOS : guide personnalisé selon la carte mère détectée (MSI, ASUS,
+    Gigabyte/AORUS, ASRock, Biostar, NZXT, PC de marque et portables).
+  - Avertit si la RAM tourne sous sa vitesse annoncée (XMP/EXPO désactivé).

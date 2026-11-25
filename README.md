@@ -1,134 +1,108 @@
-# HelixFlux-Optimisation
-Optimisation Windows sûre – by Lukzyr
+<p align="center">
+  <img src="assets/logo.png" width="112" alt="Logo HelixFlux">
+</p>
 
-VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.3). Elle a été
-  testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
-  « Exporter le journal », puis envoie le fichier avec une description du problème.
-  Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
-  versions de travail).
+<h1 align="center">HelixFlux Optimisation</h1>
+<p align="center"><b>by Lukzyr</b> · v0.1 bêta · Windows 10 / 11</p>
 
-DÉMARRAGE
-  1. Dézippe tout le dossier (ne lance pas depuis le zip).
-  2. Double-clique sur "Lukzyr Optimisation.exe" (ou, en secours,
-     sur "LANCER - Lukzyr Optimisation.bat").
-  3. Accepte la demande administrateur.
-  4. L'exe n'est pas signé numériquement : SmartScreen ou ton antivirus peuvent
-     afficher un avertissement. SmartScreen : "Informations complémentaires" >
-     "Exécuter quand même". Le code source de l'exe est dans assets\source-lanceur\
-     (il ne fait que lancer scripts\Lukzyr-Optimisation.ps1 en administrateur).
+<p align="center">
+  <img src="docs/tableau-de-bord.png" width="760" alt="Tableau de bord de HelixFlux Optimisation">
+</p>
 
-L'INTERFACE (onglets en haut)
-  TABLEAU DE BORD
-    « Optimiser en 1 clic » : choisis un profil (Gaming max, Équilibré, PC portable ;
-    PC portable est conseillé automatiquement si une batterie est détectée : il garde
-    le plan d'alimentation équilibré et l'hibernation), puis clique sur le gros bouton
-    OPTIMISER : point de restauration + sauvegarde des réglages + application du profil
-    (le bouton pulse pendant l'exécution). Seuls les réglages du profil sont appliqués
-    (pas les applis ni les pilotes).
-    Jauges en direct (processeur, carte graphique, mémoire, disque C:).
-    Alertes réelles : applis lourdes au démarrage, date de la dernière optimisation
-    (+ lien « Tout annuler »), santé des disques / espace libre, nouvelle version.
-    Tuiles vers chaque section.
+HelixFlux Optimisation est une petite application Windows (PowerShell 5.1 + WinForms, sans
+installation) qui rend un PC de jeu plus réactif **sans casser Windows** : chaque réglage
+est expliqué, marqué **SÛR / AVANCÉ / DÉFINITIF**, sauvegardé avant modification et
+annulable en un clic avec **« Tout annuler »**.
 
-  PERFORMANCE   Jeu (Mode Jeu, priorité aux jeux, planification GPU, souris sans
-                accélération), processeur et alimentation (plan hautes performances,
-                hibernation), mémoire et sécurité (VBS), affichage (transparence).
-  NETTOYAGE     Windows plus léger (débloat, Copilot, OneDrive, Edge), confidentialité
-                (télémétrie, Optimisation de la distribution), fichiers (temporaires,
-                assistant de stockage, outil Nettoyage de disque).
-  APPLICATIONS  Jeux : Steam, Epic Games, Ubisoft Connect, Rockstar Games, EA app,
-                Battle.net, GOG Galaxy. Communication et musique : Discord, Spotify.
-                Navigateurs : Brave. Création et utilitaires : OBS Studio, 7-Zip, VLC.
-                Entretien : mise à jour des autres applis.
-                (EA app, Battle.net, GOG Galaxy, 7-Zip, VLC, OBS : décochés par défaut.)
-  SYSTÈME       Démarrage : applis lancées avec Windows (éditeur, impact estimé),
-                activables / désactivables comme dans le Gestionnaire des tâches ;
-                les logiciels de sécurité ne sont jamais modifiables.
-                Réseau : DNS actuel ; Automatique (FAI), Cloudflare, Google ou Quad9
-                (IPv4 + IPv6) ; « Vider le cache DNS ».
-                Réparation et sécurité : TRIM des SSD, réparation DISM + SFC,
-                « Tout annuler », Restaurer le système, Gestionnaire de périphériques,
-                Redémarrer le PC.
-  MATÉRIEL      Mon PC (composants détectés), Pilotes officiels, Santé (disques,
-                espace libre, température, mémoire, alertes), Guide BIOS personnalisé
-                pour TA carte mère (exporter, page support, redémarrer dans le BIOS ;
-                rien n'est jamais modifié dans le BIOS ; texte du guide en français).
-  JOURNAL       Ce qui se passe, en direct.
-  PARAMÈTRES    (roue dentée) Thème clair, Langue FR / EN, Animations,
-                Mise à jour de l'appli, À propos.
+> **Statut : v0.1 bêta.** Testée (machine virtuelle Windows 10), mais encore sur peu de PC
+> différents. En cas de souci : Journal > « Exporter le journal », puis ouvre une *issue*
+> avec le fichier.
 
-  Chaque option a un badge :
-    SÛR        sans danger, remis par « Tout annuler »
-    AVANCÉ     à comprendre avant (VBS, Copilot, OneDrive, réparation DISM/SFC)
-    DÉFINITIF  ne peut pas être annulé (désinstallation d'Edge)
-  Activer une option AVANCÉ ou DÉFINITIF à la main demande une confirmation, et le
-  récapitulatif avant application les liste à part.
+## Captures
 
-  Dans une section : active les interrupteurs voulus (clique n'importe où sur la
-  carte), puis APPLIQUER (en bas). Une seule fenêtre récapitule ce qui va être fait.
-  Tout se déroule en arrière-plan, sans fenêtre noire, et s'affiche dans Journal.
-  Redémarre le PC à la fin.
+| Performance | Vérifications |
+|---|---|
+| <img src="docs/performance.png" width="400"> | <img src="docs/verifications.png" width="400"> |
+| **Thème clair** | **Paramètres** |
+| <img src="docs/theme-clair.png" width="400"> | <img src="docs/parametres.png" width="400"> |
 
-TOUT ANNULER (bouton en bas de chaque section, Système > Réparation et sécurité,
-              ou lien sur le Tableau de bord)
-  Avant chaque application, la valeur D'ORIGINE de chaque réglage modifié est
-  enregistrée dans C:\ProgramData\Lukzyr\sauvegarde-reglages.json (registre,
-  démarrage des services, plan d'alimentation, hibernation, TRIM, DNS, applis au
-  démarrage). Si tu appliques plusieurs fois, la toute première valeur est gardée.
-  « Tout annuler » affiche la liste de ce qui va être remis, puis restaure tout
-  à l'identique (une valeur qui n'existait pas est supprimée).
-  NE PEUVENT PAS être annulés : applis supprimées (débloat, Copilot, OneDrive) ou
-  installées, Edge désinstallé, fichiers temporaires effacés, réparation DISM/SFC.
-  Pour ça : Système > Restaurer le système (point de restauration).
+<p align="center">
+  <img src="docs/chargement.png" width="420" alt="Écran de chargement">
+  <img src="docs/animation.gif" width="420" alt="Changement de page animé">
+</p>
 
+## Fonctionnalités
 
+- **Optimiser en 1 clic** : profils *Gaming max*, *Équilibré* et *PC portable*
+  (conseillé automatiquement si une batterie est détectée). Point de restauration et
+  sauvegarde des réglages d'origine avant toute modification.
+- **Performance** : Mode Jeu, priorité aux jeux, planification GPU accélérée, souris sans
+  accélération, optimisations des jeux en fenêtre, optimisations VRR, plan d'alimentation
+  (*Utilisation normale*, conseillé pour Ryzen, ou *Performances élevées*, gain honnête de
+  0 à 2 %), hibernation, VBS (avancé), transparence, applis de démarrage sans délai, Edge
+  sans préchargement, applis du Store en arrière-plan (optionnel).
+- **Vérifications (lecture seule)** : fréquence de l'écran, Resizable BAR / Smart Access
+  Memory, Radeon Anti-Lag, Ne pas déranger en jeu, indexation de la recherche, effets
+  d'animation de Windows, chacune avec un bouton vers le bon réglage.
+- **Nettoyage** : débloat (publicités, suggestions), télémétrie réduite, Copilot, OneDrive,
+  partage des mises à jour, fichiers temporaires, assistant de stockage, nettoyage des
+  composants Windows (WinSxS, **jamais** `/ResetBase`).
+- **Applications** : installation depuis les sources officielles (winget) : Steam, Epic
+  Games, Ubisoft Connect, Discord, Spotify, Brave, OBS Studio, 7-Zip, VLC…
+- **Système** : applis au démarrage, DNS (Automatique, Cloudflare, Google, Quad9), TRIM,
+  réparation DISM + SFC, Restaurer le système.
+- **Matériel** : composants détectés, pilotes officiels, santé des disques, température,
+  guide BIOS adapté à la carte mère détectée (rien n'est jamais modifié dans le BIOS).
+- Thème clair / sombre, français / anglais, animations douces et économes : un seul
+  minuteur qui s'arrête dès que rien ne bouge, pause quand la fenêtre est réduite ou
+  inactive, réglage Windows « Effets d'animation » respecté, option « Animations réduites ».
 
-RÉGLAGES DE L'APPLI
-  Animations, thème et langue sont mémorisés dans HKCU\Software\Lukzyr
-  (Animations, Theme, Langue). Par défaut : animations selon Windows, thème
-  sombre, langue de Windows (français sinon anglais).
+## Ce que HelixFlux ne touche jamais
 
-SÉCURITÉ
-  - Un point de restauration "Avant Lukzyr Optimisation" est créé avant de commencer.
-  - Les réglages d'origine sont sauvegardés : « Tout annuler ».
-  - Store, Xbox, Defender, Windows Update et pilotes ne sont jamais touchés
-    (aucun pilote n'est supprimé).
-  - Le journal de chaque exécution est gardé dans C:\ProgramData\Lukzyr\
-    (Paramètres > À propos > « Ouvrir les journaux », ou Journal > « Ouvrir le dossier
-    des journaux » ; le dossier est créé s'il n'existe pas).
+- Windows Defender et la sécurité Windows
+- Windows Update (le service d'Optimisation de la distribution n'est jamais désactivé)
+- Le Microsoft Store et les composants Xbox
+- Les pilotes : aucun pilote n'est supprimé, et l'appli n'installe ni ne fournit aucun
+  pilote noyau
+- Le BIOS (seulement un guide à lire)
 
-TEMPÉRATURE (Matériel > Santé)
-  L'appli essaie, dans l'ordre : LibreHardwareMonitor / OpenHardwareMonitor s'ils
-  tournent, puis les capteurs que Windows expose (zone thermique, ACPI). Les valeurs
-  impossibles (27,8 °C fixe, moins de 15 °C, plus de 115 °C) sont ignorées et la source
-  est affichée sous la mesure.
-  Beaucoup de PC (notamment les processeurs AMD Ryzen) ne donnent PAS leur température
-  à Windows : la carte l'explique et propose « Installer LibreHardwareMonitor »
-  (gratuit, open source, installé avec winget depuis le dépôt officiel, seulement si tu
-  confirmes). Ensuite : ouvre LibreHardwareMonitor, Options > Remote Web Server > Run
-  (port 8085), puis Actualiser dans Santé : températures processeur ET carte graphique.
-  Bon à savoir : LibreHardwareMonitor utilise son propre pilote de capteurs, que
-  certains antivirus (dont Defender) peuvent signaler. Lukzyr n'installe jamais de pilote
-  lui-même, n'en fournit aucun et ne touche pas à l'antivirus.
+Les valeurs d'origine sont enregistrées dans `C:\ProgramData\Lukzyr\sauvegarde-reglages.json`,
+les préférences dans `HKCU\Software\Lukzyr`.
 
-CONTENU DU DOSSIER
-  Lukzyr Optimisation.exe            Lance l'interface (demande les droits admin)
-  LANCER - Lukzyr Optimisation.bat   Lanceur de secours
-  scripts\                           Scripts PowerShell (+ Mode-console.bat sans interface,
-                                     qui propose aussi le guide BIOS personnalisé)
-  guides\Guide-BIOS.txt              Guide BIOS générique (secours)
-  assets\lukzyr.ico                  Icône (fenêtre + exe)
-  assets\logo.png                    Logo de l'en-tête
-  assets\source-lanceur\             Source du lanceur .exe + Compiler-Lanceur.bat
+## Installation
 
-CHANGER LE LOGO
-  Le logo n'existe qu'à un seul endroit : le dossier assets.
-    1. Remplace assets\logo.png (carré, 256 x 256 conseillé, fond transparent)
-       et assets\lukzyr.ico (icône Windows : 16, 32, 48, 64, 128 et 256 px).
-       La fenêtre et l'en-tête les utilisent directement.
-    2. Pour l'icône de l'exe (elle est intégrée au fichier) : double-clique sur
-       assets\source-lanceur\Compiler-Lanceur.bat. Il recompile
-       « Lukzyr Optimisation.exe » avec le compilateur C# fourni avec Windows
-       (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
-       icône en cache quelques minutes.
+1. Télécharge le zip de la dernière version dans
+   [Releases](https://github.com/LuKZyR/HelixFlux-Optimisation/releases) et **dézippe tout
+   le dossier** (ne lance pas depuis le zip).
+2. Double-clique sur **`HelixFlux Optimisation.exe`** (ou, en secours, sur
+   `LANCER - HelixFlux Optimisation.bat`) et accepte la demande administrateur.
+3. L'exe n'est pas signé : SmartScreen peut afficher un avertissement
+   (« Informations complémentaires » > « Exécuter quand même »).
+
+### Depuis les sources
+
+Le dépôt ne contient aucun exe ni DLL compilé. Pour les recréer avec le compilateur C# fourni
+avec Windows (.NET Framework 4, rien à installer) :
+
+```bat
+assets\source-lanceur\Compiler-Lanceur.bat
+```
+
+Il produit `HelixFlux Optimisation.exe` à la racine et `scripts\LkChargement.dll` (écran de
+chargement). Sans eux, `LANCER - HelixFlux Optimisation.bat` lance directement
+`scripts\HelixFlux-Optimisation.ps1` en administrateur (écran de chargement de secours).
+
+## Structure
+
+```
+scripts\                  Interface et scripts PowerShell (Windows PowerShell 5.1)
+assets\                   logo.png, helixflux.ico
+assets\source-lanceur\    Source C# du lanceur et de l'écran de chargement, Compiler-Lanceur.bat, logo d'origine
+guides\                   Guide BIOS générique
+docs\                     Captures d'écran
+LISEZ-MOI.txt             Mode d'emploi détaillé (aussi fourni dans le zip)
+```
+
+## Crédits
+
+HelixFlux Optimisation, **by Lukzyr**. © 2026 Lukzyr.
