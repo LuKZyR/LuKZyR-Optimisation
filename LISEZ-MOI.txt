@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.13). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.14). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -42,7 +42,8 @@ L'INTERFACE (barre latérale à gauche)
     souris sans accélération, jeux en fenêtre, télémétrie réduite, démarrage sans
     délai, Edge sans préchargement, assistant de stockage) = 70 points ; applis lourdes
     au démarrage (10), espace libre du disque système (10), santé des disques (5), âge
-    du pilote graphique (5). Une mesure pas encore lue n'est pas comptée. VBS n'est pas
+    du pilote graphique (5), aucun réglage nuisible d'un autre optimiseur (5),
+    diagnostic du matériel sans alerte (5). Une mesure pas encore lue n'est pas comptée. VBS n'est pas
     compté (compromis sécurité / performance). « Détails » montre chaque point.
     À côté : applis lourdes au démarrage, date de la dernière optimisation (+ lien
     « Tout annuler »), santé des disques / espace libre, nouvelle version.
@@ -58,9 +59,11 @@ L'INTERFACE (barre latérale à gauche)
     Accès rapide : Session de jeu, Espace disque, Démarrage, Nettoyage.
 
   PERFORMANCE   Réglages : jeu (Mode Jeu, priorité aux jeux, planification GPU, souris sans
-                accélération, optimisations des jeux en fenêtre, optimisations VRR),
+                accélération, optimisations des jeux en fenêtre, optimisations VRR,
+                carte graphique puissante pour les jeux si le PC a 2 cartes),
                 processeur et alimentation (plan Utilisation normale OU Performances
-                élevées, hibernation), mémoire et sécurité (VBS), affichage
+                élevées, mode « Meilleures performances » de Windows 11, hibernation
+                (jamais sur un PC avec batterie)), mémoire et sécurité (VBS), affichage
                 (transparence), démarrage et arrière-plan (applis de démarrage sans
                 délai, Edge sans préchargement, applis du Store en arrière-plan).
                 En bas : VÉRIFICATIONS (rien n'est modifié) : fréquence de l'écran,
@@ -70,8 +73,8 @@ L'INTERFACE (barre latérale à gauche)
                 Session de jeu (nouveau) : ferme les applis cochées (OneDrive, Teams,
                 Widgets, Lien avec le téléphone, Adobe ; Spotify, Discord, launchers,
                 logiciels RGB si tu les coches) et peut passer en Performances élevées.
-                « Terminer la session » relance les applis (avec tes droits normaux)
-                et remet ton plan d'alimentation. Rien n'est désinstallé. Si le PC
+                « Terminer la session » relance les applis (avec tes droits normaux
+                et leurs options d'origine) et remet ton plan d'alimentation. Rien n'est désinstallé. Si le PC
                 redémarre en pleine session, l'appli propose de la terminer au
                 prochain lancement.
   NETTOYAGE     Windows plus léger (débloat, Copilot, OneDrive, Edge), confidentialité
@@ -92,10 +95,24 @@ L'INTERFACE (barre latérale à gauche)
                 Espace disque (nouveau, lecture seule) : taille des dossiers perso,
                 temporaires, corbeille, jeux Steam, hiberfil/pagefile, AppData.
                 Un clic ouvre le dossier ; rien n'est jamais supprimé.
-                Réparation et sécurité : TRIM des SSD, réparation DISM + SFC,
-                « Tout annuler », Restaurer le système, Gestionnaire de périphériques,
-                Redémarrer le PC.
-  MATÉRIEL      Mon PC (composants détectés + « Rapport système » : un fichier HTML
+                Réparation et sécurité : TRIM des SSD, Optimiser les lecteurs,
+                réparation DISM + SFC, « Tout annuler », Restaurer le système,
+                Gestionnaire de périphériques, Redémarrer le PC.
+                Réparer (nouveau) : réglages nuisibles laissés par d'autres
+                « optimiseurs » (démarrage forcé, fichier d'échange, services utiles
+                coupés, compression mémoire, « Optimiser les lecteurs », valeurs
+                « magiques », protections du processeur), à cocher puis APPLIQUER ;
+                état de Windows Update, Defender et de l'Optimisation de la
+                distribution (affiché seulement, jamais modifié) ; tâches planifiées
+                d'autres éditeurs, décochées par défaut (jamais celles de Microsoft,
+                des navigateurs ni des antivirus).
+  MATÉRIEL      Diagnostic (nouveau, lecture seule) : dual channel, lien PCIe de la
+                carte graphique, pilote chipset AMD, Ryzen X3D (pilote V-Cache, Mode
+                Jeu, Game Bar), version de Windows pour les Ryzen, jeux sur disque
+                dur, réglage conseillé pour un écran FreeSync / G-Sync. Vert = bon,
+                orange = à revoir, avec quoi faire ; seules les vérifications qui
+                concernent ton PC sont affichées.
+                Mon PC (composants détectés + « Rapport système » : un fichier HTML
                 et texte sur le Bureau avec le matériel, les pilotes, Windows et les
                 réglages appliqués, pratique pour demander de l'aide ; rien n'est
                 envoyé), Pilotes officiels (avec la version et l'âge du pilote
@@ -135,8 +152,8 @@ TOUT ANNULER (bouton en bas de chaque section, Système > Réparation et sécuri
               ou lien sur le Tableau de bord)
   Avant chaque application, la valeur D'ORIGINE de chaque réglage modifié est
   enregistrée dans C:\ProgramData\Lukzyr\sauvegarde-reglages.json (registre,
-  démarrage des services, plan d'alimentation, hibernation, TRIM, DNS, applis au
-  démarrage). Si tu appliques plusieurs fois, la toute première valeur est gardée.
+  démarrage des services, plan d'alimentation, mode d'alimentation, hibernation, TRIM,
+  DNS, applis au démarrage, tâches planifiées, réglages de démarrage réparés). Si tu appliques plusieurs fois, la toute première valeur est gardée.
   « Tout annuler » affiche la liste de ce qui va être remis, puis restaure tout
   à l'identique (une valeur qui n'existait pas est supprimée).
   NE PEUVENT PAS être annulés : applis supprimées (débloat, Copilot, OneDrive) ou
@@ -158,13 +175,13 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.12",
+           "build": "5.14",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
          }
   "version" est le numéro public, "build" le numéro interne : tant que la version
-  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.12 > 5.11 > 5.10 > 5.9).
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
   Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
   téléchargé est vérifié et supprimé s'il ne correspond pas.
   Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
@@ -226,6 +243,54 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉ v0.1 bêta (version interne 5.14)
+  - Système > Réparer : retrouve les réglages nuisibles laissés par d'autres
+    « optimiseurs » et les remet à la valeur de Windows (si tu les coches) :
+    réglages de démarrage forcés (useplatformclock, useplatformtick,
+    disabledynamictick, tscsyncpolicy), fichier d'échange absent ou minuscule,
+    services utiles désactivés (SysMain, Windows Search, impression, Bluetooth,
+    audio, thèmes), compression de la mémoire coupée, « Optimiser les lecteurs »
+    coupé, NetworkThrottlingIndex et Win32PrioritySeparation modifiés, protections
+    Spectre / Meltdown coupées. Chaque valeur d'origine est gardée (« Tout
+    annuler » ; copie de la configuration de démarrage avant tout changement).
+    Windows Update, Defender et l'Optimisation de la distribution sont seulement
+    affichés : l'appli ne les modifie jamais.
+  - Système > Réparer : tâches planifiées d'autres éditeurs, décochées par défaut.
+    Cochées = désactivées (annulable). Jamais celles de Microsoft, des
+    navigateurs ni des antivirus.
+  - Matériel > Diagnostic (lecture seule) : dual channel, lien PCIe de la carte
+    graphique, pilote chipset AMD, Ryzen X3D à 2 groupes de cœurs, version de
+    Windows pour les Ryzen, jeux sur disque dur, limite d'images/s conseillée pour
+    un écran FreeSync / G-Sync. Ajouté au Rapport système.
+  - Performance : mode d'alimentation « Meilleures performances » (Windows 11,
+    sur secteur, avec le plan Utilisation normale ; utilisé par Gaming max à la
+    place du plan Performances élevées), « Carte graphique puissante pour les
+    jeux » (seulement si le PC a 2 cartes graphiques ; tes choix existants sont
+    gardés).
+  - Système > Réparation et sécurité : « Optimiser les lecteurs » (réactive la
+    tâche hebdomadaire de Windows si elle a été coupée + retrim des SSD).
+  - Priorité aux jeux : n'écrit plus « GPU Priority » ni « SFIO Priority »
+    (inutilisés selon Microsoft) ; description honnête (effet faible).
+    « Tout annuler » remet quand même ce qu'avaient écrit les anciennes versions.
+  - Score : 2 points de plus (réglages nuisibles, diagnostic) ; « Mode Jeu » et
+    « Priorité aux jeux » comptés seulement si la valeur est vraiment en place.
+
+CORRECTIFS v0.1 bêta (version interne 5.14)
+  - « Tout annuler » remettait le DNS en automatique même s'il avait été réglé à
+    la main : le DNS d'origine est maintenant bien lu (et l'indication manuel /
+    automatique de Système > Réseau est juste).
+  - « Désactiver l'hibernation » n'est plus coché par défaut, et n'est jamais
+    appliqué sur un PC avec batterie (même sans le profil PC portable).
+  - Point de restauration : « créé » seulement s'il vient vraiment d'être créé ;
+    sinon, un point de moins de 10 minutes est réutilisé et c'est dit clairement.
+  - Session de jeu : les applis sont relancées avec leurs options d'origine et tes
+    droits normaux (plus de fenêtre de l'Explorateur ouverte par erreur).
+  - Un réglage indisponible (Edge absent, hibernation sur batterie) reste grisé
+    après une opération.
+  - Pilotes : le lien ASRock cherche directement le modèle de ta carte mère.
+  - Spotify : installé avec le chemin complet de winget.
+  - TRIM : l'état d'origine est aussi gardé sur les anciens Windows 10.
 
 NOUVEAUTÉ v0.1 bêta (version interne 5.13)
   - Tableau de bord : la carte « Carte graphique » affiche le nom de la carte

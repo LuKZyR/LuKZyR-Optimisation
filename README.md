@@ -52,8 +52,10 @@ annulable en un clic avec **« Tout annuler »**.
 - **Performance** : Mode Jeu, priorité aux jeux, planification GPU accélérée, souris sans
   accélération, optimisations des jeux en fenêtre, optimisations VRR, plan d'alimentation
   (*Utilisation normale*, conseillé pour Ryzen, ou *Performances élevées*, gain honnête de
-  0 à 2 %), hibernation, VBS (avancé), transparence, applis de démarrage sans délai, Edge
-  sans préchargement, applis du Store en arrière-plan (optionnel).
+  0 à 2 %), mode *Meilleures performances* de Windows 11, carte graphique puissante pour
+  les jeux (PC à 2 cartes), hibernation (jamais sur un PC avec batterie), VBS (avancé),
+  transparence, applis de démarrage sans délai, Edge sans préchargement, applis du Store
+  en arrière-plan (optionnel).
 - **Vérifications (lecture seule)** : fréquence de l'écran, Resizable BAR / Smart Access
   Memory, Radeon Anti-Lag, Ne pas déranger en jeu, indexation de la recherche, effets
   d'animation de Windows, chacune avec un bouton vers le bon réglage.
@@ -63,7 +65,15 @@ annulable en un clic avec **« Tout annuler »**.
 - **Applications** : installation depuis les sources officielles (winget) : Steam, Epic
   Games, Ubisoft Connect, Discord, Spotify, Brave, OBS Studio, 7-Zip, VLC…
 - **Système** : applis au démarrage, DNS (Automatique, Cloudflare, Google, Quad9), espace
-  disque, TRIM, réparation DISM + SFC, Restaurer le système.
+  disque, TRIM, Optimiser les lecteurs, réparation DISM + SFC, Restaurer le système.
+- **Réparer** : remet à la valeur de Windows les réglages nuisibles laissés par d'autres
+  « optimiseurs » (démarrage forcé, fichier d'échange, services utiles coupés, valeurs
+  « magiques »…) et propose de désactiver les tâches planifiées d'autres éditeurs
+  (décochées par défaut, annulables). Windows Update, Defender et l'Optimisation de la
+  distribution sont seulement affichés.
+- **Diagnostic (lecture seule)** : dual channel, lien PCIe de la carte graphique, pilote
+  chipset AMD, Ryzen X3D, version de Windows pour les Ryzen, jeux sur disque dur, réglage
+  conseillé pour un écran FreeSync / G-Sync, avec quoi faire.
 - **Matériel** : composants détectés, pilotes officiels, santé des disques, température,
   guide BIOS adapté à la carte mère détectée (rien n'est jamais modifié dans le BIOS).
 - Thème clair / sombre, français / anglais, animations douces et économes : un seul
