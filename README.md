@@ -16,6 +16,12 @@ annulable en un clic avec **« Tout annuler »**.
 ## Aperçu
 
 <p align="center">
+  <img src="docs/accueil.png" width="820" alt="Tableau de bord de LuKZyR Optimisation : barre latérale, score d'optimisation, profils en 1 clic, moniteur en direct">
+</p>
+<p align="center">
+  <img src="docs/performance.png" width="820" alt="Page Performance de LuKZyR Optimisation avec la barre latérale">
+</p>
+<p align="center">
   <img src="docs/chargement.png" width="440" alt="Écran de chargement de LuKZyR Optimisation">
 </p>
 
