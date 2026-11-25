@@ -1,4 +1,4 @@
-# HelixFlux Optimisation - traductions de l'interface (français -> anglais)
+# LuKZyR Optimisation - traductions de l'interface (français -> anglais)
 # Clé = texte français affiché, valeur = texte anglais. Un texte absent reste en français.
 $EN = @{
   # Barre latérale et pages
@@ -143,14 +143,14 @@ $EN = @{
   "APPLIQUER" = "APPLY"; "EN COURS" = "RUNNING"; "TERMINÉ" = "DONE"
   "Terminé. Redémarre le PC pour tout appliquer." = "Done. Restart the PC to apply everything."
   "Tout est fini ! Redémarrer maintenant ?" = "All done! Restart now?"; "Aucun réglage n'est activé." = "No setting is enabled."
-  "HelixFlux Optimisation va faire :" = "HelixFlux Optimization will do:"
+  "LuKZyR Optimisation va faire :" = "LuKZyR Optimization will do:"
   "Un point de restauration est créé avant de commencer, et les réglages d'origine sont sauvegardés (Outils > Tout annuler)." = "A restore point is created first, and the original settings are saved (Tools > Undo everything)."
   "ATTENTION : Edge sera désinstallé. Garde un autre navigateur (Brave)." = "WARNING: Edge will be uninstalled. Keep another browser (Brave)."
   "ATTENTION : désactiver VBS réduit un peu la sécurité de Windows." = "WARNING: disabling VBS slightly reduces Windows security."
   "Continuer ?" = "Continue?"; "Attends la fin de l'opération en cours." = "Wait for the current operation to finish."
   "Une opération est en cours. Quitter quand même ?" = "An operation is running. Quit anyway?"
   "Suppression de Copilot" = "Copilot removal"; "Désinstallation de OneDrive" = "OneDrive uninstall"; "Mise à jour des autres applis" = "Update of other apps"; "Désinstallation de Microsoft Edge" = "Microsoft Edge uninstall"
-  "Rien à annuler : aucun réglage n'a encore été modifié par HelixFlux Optimisation (ou tout a déjà été restauré)." = "Nothing to undo: HelixFlux Optimization hasn't changed any setting yet (or everything was already restored)."
+  "Rien à annuler : aucun réglage n'a encore été modifié par LuKZyR Optimisation (ou tout a déjà été restauré)." = "Nothing to undo: LuKZyR Optimization hasn't changed any setting yet (or everything was already restored)."
   "Ces réglages vont retrouver leur valeur d'origine :" = "These settings will get their original value back:"
   "et {0} autre(s)" = "and {0} more"
   "Ne peuvent PAS être annulés : applis supprimées ou installées, Edge, fichiers temporaires effacés. Pour ça, utilise « Restaurer le système »." = "CANNOT be undone: removed or installed apps, Edge, deleted temp files. For those, use `"System Restore`"."
@@ -199,12 +199,12 @@ $EN = @{
   'Revenir à un point de restauration (créé avant chaque application).' = 'Go back to a restore point (created before every apply).'
   'Voir les composants et leurs pilotes.' = 'See components and their drivers.'
   'Nécessaire après certaines optimisations.' = 'Needed after some optimizations.'
-  'Apparence, langue et mises à jour de HelixFlux Optimisation.' = 'Appearance, language and updates of HelixFlux Optimisation.'
+  'Apparence, langue et mises à jour de LuKZyR Optimisation.' = 'Appearance, language and updates of LuKZyR Optimisation.'
   'À propos' = 'About'
   'réglages enregistrés dans HKCU\Software\Lukzyr, journaux dans C:\ProgramData\Lukzyr.' = 'settings stored in HKCU\Software\Lukzyr, logs in C:\ProgramData\Lukzyr.'
   'Ouvrir les journaux' = 'Open logs'
   'Optimiser en 1 clic' = 'Optimize in 1 click'
-  'Choisis un profil : HelixFlux crée un point de restauration, sauvegarde tes réglages puis applique tout.' = 'Pick a profile: HelixFlux creates a restore point, backs up your settings, then applies everything.'
+  'Choisis un profil : LuKZyR crée un point de restauration, sauvegarde tes réglages puis applique tout.' = 'Pick a profile: LuKZyR creates a restore point, backs up your settings, then applies everything.'
   'OPTIMISER' = 'OPTIMIZE'
   '≈ 5 min · annulable' = '≈ 5 min · reversible'
   'Redémarre le PC' = 'Restart the PC'
@@ -307,12 +307,33 @@ $EN = @{
   "LibreHardwareMonitor ouvert : active Options > Remote Web Server > Run, puis Actualiser." = "LibreHardwareMonitor is open: enable Options > Remote Web Server > Run, then Refresh."
   "Installer LibreHardwareMonitor" = "Install LibreHardwareMonitor"
   "LibreHardwareMonitor est un outil gratuit et open source qui lit les capteurs (températures, ventilateurs). Il sera installé depuis le dépôt officiel winget." = "LibreHardwareMonitor is a free, open-source tool that reads sensors (temperatures, fans). It will be installed from the official winget repository."
-  "Bon à savoir : il utilise son propre pilote de lecture des capteurs, que certains antivirus (dont Microsoft Defender) peuvent signaler. HelixFlux ne l'installe pas lui-même et ne touche pas à l'antivirus." = "Good to know: it uses its own sensor driver, which some antivirus software (including Microsoft Defender) may flag. HelixFlux does not install it itself and does not touch the antivirus."
+  "Bon à savoir : il utilise son propre pilote de lecture des capteurs, que certains antivirus (dont Microsoft Defender) peuvent signaler. LuKZyR ne l'installe pas lui-même et ne touche pas à l'antivirus." = "Good to know: it uses its own sensor driver, which some antivirus software (including Microsoft Defender) may flag. LuKZyR does not install it itself and does not touch the antivirus."
   "Ensuite : ouvre LibreHardwareMonitor, active Options > Remote Web Server > Run, puis Actualiser dans Santé." = "Then: open LibreHardwareMonitor, enable Options > Remote Web Server > Run, then Refresh in Health."
   "Installer maintenant ?" = "Install now?"
   "winget (App Installer) est introuvable sur ce PC. Installe-le depuis le Microsoft Store, ou télécharge LibreHardwareMonitor sur son site officiel." = "winget (App Installer) was not found on this PC. Install it from the Microsoft Store, or download LibreHardwareMonitor from its official website."
   "{0} élément(s) installé(s) en {1} min." = "{0} item(s) installed in {1} min."
   "Windows (zone thermique)" = "Windows (thermal zone)"
+  # v5.6 (correctifs du compte rendu de bugs)
+  "NON RÉVERSIBLE" = "NOT REVERSIBLE"
+  "NON RÉVERSIBLE : sans risque pour Windows, mais « Tout annuler » ne peut pas le défaire (applis supprimées ou installées, fichiers effacés)." = "NOT REVERSIBLE: safe for Windows, but `"Undo everything`" cannot undo it (removed or installed apps, deleted files)."
+  "Applis inutiles retirées pour tous les comptes du PC (réinstallables via le Store), pubs, Bing, widgets." = "Useless apps removed for all accounts on this PC (reinstallable from the Store), ads, Bing, widgets."
+  "Retire l'appli Copilot (réinstallable via le Store) et masque son bouton." = "Removes the Copilot app (reinstallable from the Store) and hides its button."
+  "Gain variable (souvent faible), un peu moins de sécurité. Peut rester actif avec Hyper-V ou WSL2." = "Variable gain (often small), slightly less security. May stay on with Hyper-V or WSL2."
+  "Installation des applis" = "App installation"; "Installation des pilotes" = "Driver installation"
+  "Non annulable avec « Tout annuler » :" = "Cannot be undone with `"Undo everything`":"
+  "APPLIQUER prend en compte les cases cochées de TOUTES les pages." = "APPLY uses the ticked options of ALL pages."
+  "Sur cette page (« {0} ») : {1} élément(s)." = "On this page (`"{0}`"): {1} item(s)."
+  "Sur d'autres pages ({0}) : {1} élément(s)." = "On other pages ({0}): {1} item(s)."
+  "Oui = tout appliquer" = "Yes = apply everything"; "Non = seulement cette page" = "No = this page only"; "Annuler = ne rien faire" = "Cancel = do nothing"
+  "Le point de restauration n'a pas pu être créé (détail dans le Journal)." = "The restore point could not be created (details in the Log)."
+  "Continuer quand même, SANS point de restauration ?" = "Continue anyway, WITHOUT a restore point?"
+  "Non = tout arrêter : rien n'a encore été modifié." = "No = stop everything: nothing has been changed yet."
+  "Arrêté : rien n'a été modifié." = "Stopped: nothing was changed."; "Arrêté : rien n'a été modifié" = "Stopped: nothing was changed"
+  "Le point de restauration n'a pas pu être créé : tu as choisi de tout arrêter." = "The restore point could not be created: you chose to stop everything."
+  "{0} réglage(s) appliqué(s) en {1} min · SANS point de restauration." = "{0} setting(s) applied in {1} min · WITHOUT a restore point."
+  "L'étape en cours sera arrêtée (avec tout ce qu'elle a lancé) et peut rester à moitié faite." = "The current step will be stopped (with everything it started) and may be left half done."
+  "Appliqué tout de suite, comme le Gestionnaire des tâches. Annulable avec « Tout annuler »." = "Applied right away, like Task Manager. Can be undone with `"Undo everything`"."
+  "≈ 5 min" = "≈ 5 min"
 }
 # Traductions sensibles à la casse (la table ci-dessus ignore la casse : « SYSTÈME » = « Système »)
 $ENexact = New-Object Collections.Hashtable ([StringComparer]::Ordinal)

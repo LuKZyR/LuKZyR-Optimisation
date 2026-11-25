@@ -1,5 +1,5 @@
 # =====================================================================
-#  HELIXFLUX OPTIMISATION v0.1 bêta (version interne 5.3) - Écran de chargement
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.3) - Écran de chargement
 #  v5.3 : l'écran est en C# compilé (scripts\LkChargement.dll, source dans assets\source-lanceur) :
 #  aucun code PowerShell ne tourne sur son fil, et il a plusieurs chemins de fermeture (voir le .cs).
 #  Si la DLL manque, on retombe sur l'ancien écran PowerShell, avec les mêmes filets de sécurité.
@@ -31,7 +31,7 @@ $codeChargement = {
   else { $cFond = Hex "#0f0f15"; $cBord = Hex "#26263a"; $cTexte = Hex "#f2f2f7"; $cGris = Hex "#8a8aa3"; $cAcc = Hex "#a78bfa"; $cPiste = Hex "#24242e" }
   $cViolet = Hex "#8c52ff"
   $f = New-Object Windows.Forms.Form
-  $f.Text = "HelixFlux Optimisation - preparation"; $f.FormBorderStyle = "None"; $f.StartPosition = "CenterScreen"
+  $f.Text = "LuKZyR Optimisation - preparation"; $f.FormBorderStyle = "None"; $f.StartPosition = "CenterScreen"
   $f.ClientSize = New-Object Drawing.Size([int](S 440), [int](S 270)); $f.BackColor = $cFond; $f.ShowInTaskbar = $true
   $f.GetType().GetProperty("DoubleBuffered", [Reflection.BindingFlags]"NonPublic,Instance").SetValue($f, $true, $null)
   try { if ($chg.Ico -and (Test-Path $chg.Ico)) { $f.Icon = New-Object Drawing.Icon($chg.Ico) } } catch {}
@@ -61,8 +61,8 @@ $codeChargement = {
     }
     if ($logo) { $g.DrawImage($logo, [float]($cx - (S 28)), [float]($cy - (S 28)), [float](S 56), [float](S 56)) }
     $fl = [Windows.Forms.TextFormatFlags]"HorizontalCenter, VerticalCenter, SingleLine, NoPrefix"
-    [Windows.Forms.TextRenderer]::DrawText($g, "HELIXFLUX", $polT, (New-Object Drawing.Rectangle(0, [int](S 112), $W, [int](S 34))), $cAcc, $fl)
-    [Windows.Forms.TextRenderer]::DrawText($g, "Optimisation  ·  by Lukzyr", $polS, (New-Object Drawing.Rectangle(0, [int](S 144), $W, [int](S 20))), $cGris, $fl)
+    [Windows.Forms.TextRenderer]::DrawText($g, "LuKZyR", $polT, (New-Object Drawing.Rectangle(0, [int](S 112), $W, [int](S 34))), $cAcc, $fl)
+    [Windows.Forms.TextRenderer]::DrawText($g, "Optimisation", $polS, (New-Object Drawing.Rectangle(0, [int](S 144), $W, [int](S 20))), $cGris, $fl)
     # étape en cours : petit cercle qui tourne + texte + pourcentage
     $xb = S 64; $wb = $W - 2 * $xb; $ye = S 188
     $pen = New-Object Drawing.Pen([Drawing.Color]::FromArgb(60, $cAcc), [float](S 2)); $g.DrawEllipse($pen, $xb, $ye, (S 13), (S 13)); $pen.Dispose()
@@ -78,7 +78,7 @@ $codeChargement = {
     $wf = [float]($wb * [math]::Min(100, $st.Aff) / 100)
     if ($wf -ge 1) {
       $p = Arrondi $xb $yb ([math]::Max($wf, $hb)) $hb ($hb / 2)
-      $lg = New-Object Drawing.Drawing2D.LinearGradientBrush((New-Object Drawing.PointF($xb, 0)), (New-Object Drawing.PointF(($xb + $wb), 0)), (Hex "#2f9bff"), $cViolet)
+      $lg = New-Object Drawing.Drawing2D.LinearGradientBrush((New-Object Drawing.PointF($xb, 0)), (New-Object Drawing.PointF(($xb + $wb), 0)), (Hex "#12e0ff"), $cViolet)
       $g.FillPath($lg, $p); $lg.Dispose()
       $xr = $xb + (($t * 0.6) % 1.4 - 0.2) * $wb; $wr = S 60
       $g.SetClip($p)
@@ -94,7 +94,7 @@ $codeChargement = {
     $t = $st.Sw.Elapsed.TotalSeconds; $dt = [math]::Min(0.2, $t - $st.Der); $st.Der = $t
     $st.Ang = ($st.Ang + 330 * $dt) % 360
     # le titre « chargement » n'apparaît qu'une fois l'écran dessiné : le lanceur .exe passe alors la main sans trou
-    if ($st.Peint -and $f.Text -ne "HelixFlux Optimisation - chargement") { $f.Text = "HelixFlux Optimisation - chargement" }
+    if ($st.Peint -and $f.Text -ne "LuKZyR Optimisation - chargement") { $f.Text = "LuKZyR Optimisation - chargement" }
     $p0 = [double]$chg.Pct; $p1 = [double]$chg.Max
     if ($p0 -ne $st.PctVu) { $st.PctVu = $p0; $st.Depuis = $t }
     # pendant une étape, on avance doucement vers la fin de l'étape (sans jamais l'atteindre avant qu'elle soit finie)
@@ -119,7 +119,7 @@ function Demarrer-Chargement($racine, $version, $beta = $false) {
     $en = if ("$($pr.Langue)" -in @("fr", "en")) { "$($pr.Langue)" -eq "en" } else { (Get-UICulture).TwoLetterISOLanguageName -ne "fr" }
     $chg.Etape = if ($en) { "Loading the interface..." } else { "Chargement de l'interface..." }
     $chg.Version = "v$version" + $(if ($beta) { if ($en) { " beta" } else { " bêta" } } else { "" }); $chg.Pct = 10.0; $chg.Max = 20.0   # suite du lanceur .exe (0 -> 10 %)
-    $chg.Logo = Join-Path $racine "assets\logo.png"; $chg.Ico = Join-Path $racine "assets\helixflux.ico"
+    $chg.Logo = Join-Path $racine "assets\logo.png"; $chg.Ico = Join-Path $racine "assets\lukzyr.ico"
     if ($env:LK_CHARGEMENT_PS) { throw "écran PowerShell demandé (test)" }
     # DLL chargée depuis ses octets : marche même si le zip téléchargé a « bloqué » les fichiers
     $dll = Join-Path $racine "scripts\LkChargement.dll"
