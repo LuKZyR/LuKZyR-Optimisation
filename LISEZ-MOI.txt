@@ -358,7 +358,7 @@ NOUVEAUTÉS v0.1 bêta (version interne 5.3)
     Windows n'a pas ouvert la fenêtre. « Exporter le journal » : message en cas d'erreur.
   - Température : plusieurs sources + explication + LibreHardwareMonitor en option
     (voir TEMPÉRATURE). Température de la carte graphique si disponible.
-  - Mon PC : vraie quantité de mémoire vidéo (au-delà de 4 Go, ex. RX 7600 8 Go), carte
+  - Mon PC : vraie quantité de mémoire vidéo (même au-delà de 4 Go), carte
     graphique dédiée affichée en premier.
   - Windows 11 23H2 / 24H2 : suppression de l'appli Copilot fiabilisée (appli par appli,
     composants système laissés en place, ne revient pas pour les nouveaux comptes).
