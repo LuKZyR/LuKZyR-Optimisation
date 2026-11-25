@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.8). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.9). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -150,7 +150,7 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.8",
+           "build": "5.9",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
@@ -218,6 +218,16 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+CORRECTIF v0.1 bêta (version interne 5.9)
+  - Démarrage réparé : la 5.8 s'arrêtait avec « Les composants de l'interface n'ont pas
+    pu être compilés ». Ce n'était pas .NET : Windows PowerShell 5.1 traite le moindre
+    avertissement du compilateur C# comme une erreur, et un avertissement (CS1690)
+    bloquait toute l'interface. Le code est corrigé et les avertissements ne peuvent
+    plus empêcher le démarrage.
+  - Si l'appli ne démarre pas, le message et C:\ProgramData\Lukzyr\plantage-demarrage.txt
+    donnent maintenant l'erreur exacte (texte du compilateur, versions de PowerShell
+    et de Windows) : envoie ce fichier pour qu'on corrige vite.
 
 NOUVEAUTÉS v0.1 bêta — nouvelle interface (version interne 5.8)
   - Barre latérale à gauche (remplace les onglets du haut) : logo, recherche toujours

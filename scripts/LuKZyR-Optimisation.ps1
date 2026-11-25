@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.8)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.9)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.8
-$VersionInterne = "5.8"
+$VersionBeta = $true         # v0.1 bêta = version interne 5.9
+$VersionInterne = "5.9"
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -18,11 +18,20 @@ $script:fichierPlantage = Join-Path $env:ProgramData "Lukzyr\plantage-demarrage.
 function Noter-Plantage($texte) {
   try { [void](New-Item -ItemType Directory -Force (Split-Path $script:fichierPlantage)); [IO.File]::AppendAllText($script:fichierPlantage, "[$(Get-Date -Format s)] $texte`r`n", [Text.Encoding]::UTF8) } catch {}
 }
-function Plantage-Demarrage($texte) {
-  Noter-Plantage $texte
+# v5.9 : $details = texte exact de l'erreur (erreurs du compilateur C#, exception) : écrit en entier dans le journal
+#        et affiché (raccourci) dans le message, pour savoir enfin POURQUOI ça plante
+function Plantage-Demarrage($texte, $details) {
+  $infos = ""
+  try { $infos = "PowerShell $($PSVersionTable.PSVersion) | CLR $($PSVersionTable.CLRVersion) | " + $(if ([Environment]::Is64BitProcess) { "64 bits" } else { "32 bits" }) + " | Windows $([Environment]::OSVersion.Version) | LuKZyR Optimisation v0.1 bêta (build $VersionInterne)" } catch {}
+  $journal = $texte
+  if ($details) { $journal += "`r`n--- Détail de l'erreur ---`r`n" + (($details -split "`r?`n") -join "`r`n") }
+  if ($infos) { $journal += "`r`n--- Système ---`r`n" + $infos }
+  Noter-Plantage $journal
   try { Fermer-Chargement } catch {}
   if (-not $env:LK_TEST) {
-    try { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show(("LuKZyR Optimisation n'a pas pu démarrer :`n`n" + $texte + "`n`nDétails : " + $script:fichierPlantage), "LuKZyR Optimisation", "OK", "Error") } catch {}
+    $court = ""
+    if ($details) { $court = [string]$details; if ($court.Length -gt 1200) { $court = $court.Substring(0, 1200) + " [...]" }; $court = "`n`nErreur :`n" + $court }
+    try { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show(("LuKZyR Optimisation n'a pas pu démarrer :`n`n" + $texte + $court + "`n`nDétails complets : " + $script:fichierPlantage), "LuKZyR Optimisation", "OK", "Error") } catch {}
   }
   exit 3   # 3 = déjà signalé à l'utilisateur (le lanceur n'affiche pas un 2e message)
 }
@@ -42,7 +51,11 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 # v5.2 : écran de chargement affiché TOUT DE SUITE (avant la compilation de l'interface et la détection du matériel)
 . (Join-Path (Split-Path -Parent $PSCommandPath) "Chargement.ps1")
 Demarrer-Chargement (Split-Path -Parent (Split-Path -Parent $PSCommandPath)) $VersionApp $VersionBeta
-Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+# v5.9 : -IgnoreWarnings : Windows PowerShell 5.1 traite les AVERTISSEMENTS du compilateur C# comme des erreurs
+#        (en v5.7/5.8, l'avertissement CS1690 sur LkHero.Fill bloquait toute l'interface au démarrage).
+#        Les vraies erreurs sont gardées (-ErrorVariable / catch) et écrites dans plantage-demarrage.txt.
+$erreursCompil = @(); $exceptionCompil = $null
+try { Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -IgnoreWarnings -ErrorAction SilentlyContinue -ErrorVariable erreursCompil -TypeDefinition @"
 using System; using System.Drawing; using System.Drawing.Drawing2D; using System.Drawing.Text; using System.Windows.Forms;
 using System.Runtime.InteropServices; using System.Collections.Concurrent; using System.Collections.Generic; using System.Diagnostics; using System.Text;
 
@@ -296,7 +309,7 @@ public class LkCard : Panel {
   public Color CurrentFill { get { return shown.IsEmpty ? Target : shown; } }
   public static Color BackOf(Control c) {
     if (c.Parent == null) return c.BackColor; LkCard k = c.Parent as LkCard; if (k != null) return k.CurrentFill;
-    LkHero h = c.Parent as LkHero; if (h != null && !h.Fill.IsEmpty) return h.Fill;
+    LkHero h = c.Parent as LkHero; if (h != null) { Color hf = h.Fill; if (!hf.IsEmpty) return hf; }   // v5.9 : copie locale (évite l'avertissement CS1690)
     return c.Parent.BackColor; }
   public void SetHover(bool h) { if (HoverFill.IsEmpty || hover == h) return; Color from = CurrentFill; hover = h; Retarget(from); }
   public void SetFill(Color c) { Color from = CurrentFill; Fill = c; Retarget(from); }
@@ -1134,8 +1147,17 @@ public class LkProc {
     } catch { }
   }
 }
-"@
-if (-not ("LkProc" -as [type]) -or -not ("LkAnim" -as [type])) { Plantage-Demarrage "Les composants de l'interface n'ont pas pu être compilés (.NET Framework 4.x manquant ou endommagé ?)." }
+"@ } catch { $exceptionCompil = $_ }
+if (-not ("LkProc" -as [type]) -or -not ("LkAnim" -as [type])) {
+  $lignes = New-Object System.Collections.Generic.List[string]
+  foreach ($e in @($erreursCompil) + @($exceptionCompil)) {
+    if ($null -eq $e) { continue }
+    $m = if ($e -is [System.Management.Automation.ErrorRecord]) { $e.Exception.Message } elseif ($e -is [Exception]) { $e.Message } else { [string]$e }
+    if ($m -and -not $lignes.Contains($m.Trim())) { $lignes.Add($m.Trim()) }
+  }
+  if ($lignes.Count -eq 0) { $lignes.Add("(aucun message du compilateur : types LkProc / LkAnim introuvables après Add-Type)") }
+  Plantage-Demarrage "Les composants de l'interface n'ont pas pu être compilés." ($lignes -join "`r`n")
+}
 $dir    = Split-Path -Parent $PSCommandPath
 $racine = Split-Path -Parent $dir
 $ErrorActionPreference = "SilentlyContinue"
