@@ -68,7 +68,10 @@ foreach ($nom in $applis.Keys) {
     $dem = Join-Path $env:TEMP "lukzyr-spotify.start"
     Remove-Item $res, $dem -Force -ErrorAction SilentlyContinue
     # v5.6 : le script note qu'il a bien démarré (sinon l'Explorateur ne l'a pas lancé), puis le code de winget
-    Set-Content -Path $cmd -Encoding ASCII -Value "@echo off`r`necho 1 > `"$dem`"`r`nwinget install --id Spotify.Spotify --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity`r`necho CODE=%ERRORLEVEL% > `"$res`"`r`nexit"
+    # v5.14 : chemin COMPLET de winget (comme partout ailleurs) : d'abord l'alias de l'utilisateur qui lance le script
+    # (droits normaux), sinon le chemin trouvé ici ; plus de « winget » nu qui dépendait du PATH
+    $wgCmd = "$winget" -replace '%', '%%'
+    Set-Content -Path $cmd -Encoding Oem -Value "@echo off`r`necho 1 > `"$dem`"`r`nset `"WG=%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe`"`r`nif not exist `"%WG%`" set `"WG=$wgCmd`"`r`n`"%WG%`" install --id Spotify.Spotify --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity`r`necho CODE=%ERRORLEVEL% > `"$res`"`r`nexit"
     $lua = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -ErrorAction SilentlyContinue).EnableLUA
     if ($lua -eq 0) {
       # Contrôle de compte (UAC) désactivé : l'Explorateur est lui aussi administrateur -> jeton restreint

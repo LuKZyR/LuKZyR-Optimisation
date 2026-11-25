@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.13)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.14)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.13
-$VersionInterne = "5.13"   # comparé comme [version] : 5.13 > 5.12 > 5.11 > 5.10
+$VersionBeta = $true         # v0.1 bêta = version interne 5.14
+$VersionInterne = "5.14"   # comparé comme [version] : 5.14 > 5.13 > 5.12 > 5.11 > 5.10
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -15,6 +15,9 @@ $UrlMiseAJourDefaut = "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisat
 $UrlReleasesDefaut  = "https://api.github.com/repos/LuKZyR/LuKZyR-Optimisation/releases?per_page=5"
 # v5.12 : serveur Discord pour signaler les bugs (Paramètres > « Signaler un bug (Discord) », messages de plantage)
 # v5.13 : Accueil, carte « Carte graphique » : nom court au lieu de la VRAM ; badges d'état en regular (plus de gras)
+# v5.14 : 12 optimisations sûres (Système > Réparer, Matériel > Diagnostic, mode Meilleures performances, carte graphique
+#         par jeu, Optimiser les lecteurs) + correctifs (DNS de « Tout annuler », hibernation sur portable, point de
+#         restauration, relance de la session de jeu, interrupteurs indisponibles, score, ASRock, Spotify, TRIM)
 $UrlDiscord = "https://discord.gg/2RrjqvC5vv"
 # v5.6 : un plantage au démarrage n'est plus invisible : journal ProgramData\Lukzyr\plantage-demarrage.txt + message
 $script:fichierPlantage = Join-Path $env:ProgramData "Lukzyr\plantage-demarrage.txt"
@@ -1355,6 +1358,11 @@ $portable = [bool](Lire-Wmi "batterie" {
   $fixe = [bool]@(@((Get-CimInstance Win32_SystemEnclosure).ChassisTypes) | Where-Object { $_ -in 3, 4, 5, 6, 7, 13, 15, 16, 24, 35 }).Count
   [bool]$bat.Count -and -not $fixe
 })
+# v5.14 : vraie batterie (pas un onduleur), même si Windows ne dit pas « portable » : l'hibernation n'est jamais coupée
+$batterie = $portable -or [bool](Lire-Wmi "batterie" { @(Get-CimInstance Win32_Battery | Where-Object { "$($_.Name) $($_.DeviceID)" -notmatch 'UPS|APC|Eaton|CyberPower|Back-?UPS|Onduleur|Smart-UPS' }).Count })
+# v5.14 : 2 cartes graphiques (puce du processeur + carte dédiée) : « carte graphique puissante pour les jeux » proposée
+$deuxGpu = @($tousGpu | Where-Object { "$($_.PNPDeviceID)" -like 'PCI\*' }).Count -ge 2
+$buildWin = 0; try { $buildWin = [int](Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuild } catch {}
 
 $cpuNom = ("$($cpu.Name)" -replace '\s+',' ').Trim()
 $cpuMarque = if ($cpu.Manufacturer -match "AMD") { "AMD" } elseif ($cpu.Manufacturer -match "Intel") { "Intel" } else { "$($cpu.Manufacturer)" }
@@ -1410,7 +1418,7 @@ switch -Regex ($cmMarque) {
   "MSI"      { $pilotes += @{ Nom = "Carte mère MSI $cmModele"; Desc = "BIOS, LAN, audio : page support officielle MSI."; Url = "https://www.msi.com/search/$q" } }
   "ASUS"     { $pilotes += @{ Nom = "Carte mère ASUS $cmModele"; Desc = "BIOS, LAN, audio : page support officielle ASUS."; Url = "https://www.asus.com/fr/searchresult?searchType=support&searchKey=$q" } }
   "Gigabyte" { $pilotes += @{ Nom = "Carte mère Gigabyte $cmModele"; Desc = "BIOS, LAN, audio : page support officielle Gigabyte."; Url = "https://www.gigabyte.com/fr/Search?kw=$q" } }
-  "ASRock"   { $pilotes += @{ Nom = "Carte mère ASRock $cmModele"; Desc = "BIOS, LAN, audio : page support officielle ASRock."; Url = "https://www.asrock.com/support/index.fr.asp" } }
+  "ASRock"   { $pilotes += @{ Nom = "Carte mère ASRock $cmModele"; Desc = "BIOS, LAN, audio : page support officielle ASRock."; Url = "https://www.asrock.com/search/index.fr.asp?Keyword=$q" } }
   default    { if ("$cmMarque$cmModele") { $pilotes += @{ Nom = "Carte mère / PC $cmMarque $cmModele".Trim(); Desc = "Recherche la page support du fabricant."; Url = "https://www.google.com/search?q=" + $enc.Invoke("$cmMarque $cmModele drivers support officiel") } } }
 }
 $vus = @{}
@@ -1551,14 +1559,14 @@ $groupes = [ordered]@{
   performance = @{ Nom = "Performance"; Pages = @("perf", "session") }
   nettoyage   = @{ Nom = "Nettoyage"; Pages = @("nettoyage") }
   applis      = @{ Nom = "Applications"; Pages = @("applis") }
-  systeme     = @{ Nom = "Système"; Pages = @("demarrage", "reseau", "espace", "sysoutils") }
-  materiel    = @{ Nom = "Matériel"; Pages = @("infos", "pilotes", "sante", "bios") }
+  systeme     = @{ Nom = "Système"; Pages = @("demarrage", "reseau", "espace", "sysoutils", "reparer") }
+  materiel    = @{ Nom = "Matériel"; Pages = @("infos", "diagnostic", "pilotes", "sante", "bios") }
   journal     = @{ Nom = "Journal"; Pages = @("journal") }
   parametres  = @{ Nom = "Paramètres"; Pages = @("parametres") }
 }
 $groupeDe = @{}; $derniere = @{}
 foreach ($g in $groupes.Keys) { foreach ($pg in $groupes[$g].Pages) { $groupeDe[$pg] = $g }; $derniere[$g] = $groupes[$g].Pages[0] }
-$nomsSousPages = @{ perf = "Réglages"; session = "Session de jeu"; espace = "Espace disque"; infos = "Mon PC"; demarrage = "Démarrage"; reseau = "Réseau"; sysoutils = "Réparation et sécurité"; pilotes = "Pilotes"; sante = "Santé"; bios = "BIOS" }
+$nomsSousPages = @{ perf = "Réglages"; session = "Session de jeu"; espace = "Espace disque"; infos = "Mon PC"; demarrage = "Démarrage"; reseau = "Réseau"; sysoutils = "Réparation et sécurité"; pilotes = "Pilotes"; sante = "Santé"; bios = "BIOS"; reparer = "Réparer"; diagnostic = "Diagnostic" }
 
 # v5.8 : navigation de la barre latérale (une entrée par section + raccourci « Session de jeu »)
 $fNav = Police 13.5 "Bold"; $fNavActif = Police 13.5 "Bold"
@@ -1963,6 +1971,19 @@ function Exporter-Rapport {
     else { $ldm += , @("-", (T "Ouvre Système > Démarrage une fois pour l'ajouter au rapport.")) }
     $S[(T "Applis au démarrage")] = $ldm
     $S[(T "Session de jeu")] = @(, @((T "État"), $(if (Session-Active) { T "en cours" } else { T "aucune" })))
+    # v5.14 : diagnostic du matériel et réglages laissés par d'autres optimiseurs (lus en arrière-plan au démarrage)
+    $ldg = @()
+    if ($script:diagRes) { foreach ($it in @($script:diagItems)) { $ldg += , @("$($it.Titre)", ("$($it.Statut) · $($it.Detail)" + $(if ($it.Conseil) { " · " + (T "À faire") + " : " + (T $it.Conseil) } else { "" }))) } }
+    if (-not $ldg.Count) { $ldg += , @("-", $(if ($script:diagRes) { T "Aucune vérification ne concerne ce PC." } else { T "Ouvre Matériel > Diagnostic une fois pour l'ajouter au rapport." })) }
+    $S[(T "Diagnostic")] = $ldg
+    $lrp = @()
+    if ($script:reparRes) {
+      foreach ($pb in @($script:reparRes.Problemes | Where-Object { $_ })) { $tx = Texte-Reparation $pb; $lrp += , @("$($tx[0])", "$($tx[1])") }
+      if (-not $lrp.Count) { $lrp += , @("-", (T "Aucun réglage nuisible trouvé.")) }
+      foreach ($e in @($script:reparRes.Etats | Where-Object { $_ })) { $lrp += , @("$($e.Id)", ((Texte-StartType $e.Demarrage) + " · $($e.Statut)" + $(if ($e.Antivirus) { " · $($e.Antivirus)" } else { "" }))) }
+      $lrp += , @((T "Tâches planifiées d'autres éditeurs"), "$(@($script:reparRes.Taches | Where-Object { $_ }).Count)")
+    } else { $lrp += , @("-", (T "Ouvre Système > Réparer une fois pour l'ajouter au rapport.")) }
+    $S[(T "Réglages d'autres optimiseurs")] = $lrp
 
     $nom = "LuKZyR-rapport-" + (Get-Date -Format "yyyyMMdd-HHmm")
     $dos = if ($env:LK_TEST -or $TestAuto) { $dossierJournal } else { [Environment]::GetFolderPath("Desktop") }
@@ -2033,14 +2054,16 @@ $pO = NouvellePage "perf" "Performance" "Jeu, processeur, mémoire et affichage.
 # Clé, titre, description, actif par défaut, badge, page / section
 $optims = @(
   @("ModeJeu",           "Mode Jeu", "Windows donne la priorité au jeu, enregistrement en arrière-plan coupé.", $true, "s", "perf", "JEU"),
-  @("PrioriteJeux",      "Priorité aux jeux", "Plus de temps CPU et GPU pour le jeu au premier plan.", $true, "s", "perf", "JEU"),
+  @("PrioriteJeux",      "Priorité aux jeux", "Effet faible : un peu moins de processeur réservé aux tâches de fond. Pas de gain d'images/s garanti.", $true, "s", "perf", "JEU"),
+  @("GpuJeux",           "Carte graphique puissante pour les jeux", "PC à 2 cartes graphiques : tes jeux Steam et Epic utilisent la carte dédiée. Tes choix déjà faits sont gardés.", $false, "s", "perf", "JEU"),
   @("PlanifGPU",         "Planification GPU accélérée", "Moins de latence en jeu (après redémarrage).", $true, "s", "perf", "JEU"),
   @("Souris",            "Souris sans accélération", "Visée plus précise, mouvement 1:1.", $true, "s", "perf", "JEU"),
   @("JeuxFenetres",      "Optimisations des jeux en fenêtre", "Moins de latence en plein écran fenêtré, HDR auto possible.", $true, "s", "perf", "JEU"),
   @("VRR",               "Optimisations VRR (FreeSync / G-Sync)", "Fréquence variable aussi pour les jeux qui ne la gèrent pas.", $true, "s", "perf", "JEU"),
   @("PlanEquilibre",     "Plan d'alimentation Utilisation normale", "Conseillé pour Ryzen : mêmes performances en jeu, moins de chaleur.", $false, "s", "perf", "PROCESSEUR ET ALIMENTATION"),
   @("Alimentation",      "Plan d'alimentation Performances élevées", "Gain faible (0 à 2 %), un peu plus de chaleur. Ignoré sur PC portable.", $true, "s", "perf", "PROCESSEUR ET ALIMENTATION"),
-  @("Hibernation",       "Désactiver l'hibernation", "Libère plusieurs Go sur C: et coupe le démarrage rapide.", $true, "s", "perf", "PROCESSEUR ET ALIMENTATION"),
+  @("ModeAlimPerf",      "Mode d'alimentation « Meilleures performances »", "Windows 11, sur secteur : le processeur monte plus vite en fréquence. Gain faible. Va avec le plan Utilisation normale.", $false, "s", "perf", "PROCESSEUR ET ALIMENTATION"),
+  @("Hibernation",       "Désactiver l'hibernation", "Libère plusieurs Go sur C: et coupe le démarrage rapide. Jamais sur un PC avec batterie.", $false, "s", "perf", "PROCESSEUR ET ALIMENTATION"),
   @("VBS",               "Désactiver VBS / intégrité de la mémoire", "Gain variable (souvent faible), un peu moins de sécurité. Peut rester actif avec Hyper-V ou WSL2.", $false, "a", "perf", "MÉMOIRE ET SÉCURITÉ"),
   @("Transparence",      "Désactiver la transparence", "Effets visuels plus légers.", $true, "s", "perf", "AFFICHAGE"),
   @("DelaiDemarrage",    "Applis de démarrage sans délai", "Windows lance tes applis de démarrage sans attendre 10 secondes.", $true, "s", "perf", "DÉMARRAGE ET ARRIÈRE-PLAN"),
@@ -2051,8 +2074,11 @@ $optims = @(
   @("AssistantStockage", "Assistant de stockage", "Nettoyage automatique des fichiers inutiles.", $true, "s", "nettoyage", "FICHIERS"),
   @("WinSxS",            "Nettoyage des composants Windows", "Supprime les anciennes versions des composants (5 à 15 min). Mises à jour toujours désinstallables.", $false, "n", "nettoyage", "FICHIERS"),
   @("TRIM",              "TRIM des SSD", "Garde les SSD rapides.", $true, "s", "sysoutils", "STOCKAGE"),
+  @("OptimLecteurs",     "Optimiser les lecteurs", "Réactive l'optimisation hebdomadaire de Windows si elle a été coupée, et retrim des SSD tout de suite.", $true, "s", "sysoutils", "STOCKAGE"),
   @("Reparation",        "Réparation DISM + SFC", "Vérifie et répare les fichiers Windows (environ 15 min).", $false, "n", "sysoutils", "RÉPARATION")
 )
+# v5.14 : « carte graphique par jeu » seulement s'il y a 2 cartes graphiques (sinon rien à choisir : pas affiché)
+if (-not $deuxGpu) { $optims = @($optims | Where-Object { $_[0] -ne "GpuJeux" }) }
 $gO = Grille $pO
 $grilles = @{ perf = $gO; nettoyage = $gN }
 function Placer-Optims($pageCle, $grille) {
@@ -2069,11 +2095,19 @@ Placer-Optims "nettoyage" $gN
 $swOpt = @{}; foreach ($sw in $toggles) { if ("$($sw.Tag.Cle)" -like "optim:*") { $swOpt[$sw.Tag.Cle] = $sw } }
 $swOpt["optim:Alimentation"].Add_CheckedChanged({ if ($this.Checked) { $swOpt["optim:PlanEquilibre"].Checked = $false } })
 $swOpt["optim:PlanEquilibre"].Add_CheckedChanged({ if ($this.Checked) { $swOpt["optim:Alimentation"].Checked = $false } })
-$script:edgePresent = [bool](@("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { $_ -and (Test-Path $_) })
-if (-not $script:edgePresent) {
-  $sE = $swOpt["optim:EdgeArrierePlan"]; $sE.Checked = $false; $sE.Enabled = $false
-  foreach ($c in $sE.Parent.Controls) { if ($c -is [Windows.Forms.Label] -and $c.Text -eq (T $sE.Tag.Desc)) { $c.Text = (T "Edge n'est pas installé : rien à régler.") } }
+# v5.14 : mode « Meilleures performances » = avec le plan Utilisation normale (il est sans effet avec Performances élevées)
+$swOpt["optim:ModeAlimPerf"].Add_CheckedChanged({ if ($this.Checked) { $swOpt["optim:Alimentation"].Checked = $false; $swOpt["optim:PlanEquilibre"].Checked = $true } })
+$swOpt["optim:Alimentation"].Add_CheckedChanged({ if ($this.Checked) { $swOpt["optim:ModeAlimPerf"].Checked = $false } })
+# v5.14 : un réglage indisponible sur ce PC reste grisé, même après une opération (Tag.Indispo)
+function Rendre-Indispo($sw, $texte) {
+  if (-not $sw) { return }
+  $sw.Checked = $false; $sw.Enabled = $false; $sw.Tag.Indispo = $true
+  foreach ($c in $sw.Parent.Controls) { if ($c -is [Windows.Forms.Label] -and $c.Text -eq (T $sw.Tag.Desc)) { $c.Text = (T $texte) } }
 }
+$script:edgePresent = [bool](@("${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe") | Where-Object { $_ -and (Test-Path $_) })
+if (-not $script:edgePresent) { Rendre-Indispo $swOpt["optim:EdgeArrierePlan"] "Edge n'est pas installé : rien à régler." }
+if ($batterie) { Rendre-Indispo $swOpt["optim:Hibernation"] "PC avec batterie : l'hibernation reste active (elle protège ton travail quand la batterie est vide)." }
+if ($buildWin -and $buildWin -lt 22000) { Rendre-Indispo $swOpt["optim:ModeAlimPerf"] "Windows 11 seulement : non disponible sur ce Windows." }
 # v5.5 : VÉRIFICATIONS (lecture seule, rien n'est modifié) + raccourcis vers le bon réglage
 G-Fin $gO; $gO.Y += 12; Section $pO $gO.Y "VÉRIFICATIONS (RIEN N'EST MODIFIÉ)"; $gO.Y += 32
 $script:verifs = [ordered]@{}
@@ -2186,7 +2220,9 @@ function Demarrer-Session {
       foreach ($p in $l) {
         if ($princ -and $p.ProcessName -ne $princ) { continue }
         $ch = $null; try { $ch = $p.Path } catch {}
-        if ($ch -and (Test-Path -LiteralPath $ch) -and $relancer -notcontains $ch) { $relancer += $ch }
+        # v5.14 : on garde aussi les arguments d'origine (ex. OneDrive « /background ») pour relancer à l'identique
+        $arg = ""; try { $arg = Args-Depuis "$((Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction Stop).CommandLine)" $ch } catch {}
+        if ($ch -and (Test-Path -LiteralPath $ch) -and -not @($relancer | Where-Object { $_.Chemin -eq $ch }).Count) { $relancer += [pscustomobject]@{ Chemin = $ch; Args = $arg } }
         break
       }
     }
@@ -2216,15 +2252,88 @@ function Demarrer-Session {
   } @{ ids = $ids } { param($r) Maj-Session }
   Maj-Session
 }
+# v5.14 : arguments d'une ligne de commande (sans le programme lui-même)
+function Args-Depuis($ligne, $chemin) {
+  $l = "$ligne".Trim(); if (-not $l) { return "" }
+  if ($l.StartsWith('"')) { $i = $l.IndexOf('"', 1); if ($i -gt 0) { return $l.Substring($i + 1).Trim() }; return "" }
+  if ($chemin -and $l.StartsWith("$chemin", [StringComparison]::OrdinalIgnoreCase)) { return $l.Substring("$chemin".Length).Trim() }
+  $i = $l.IndexOf(' '); if ($i -gt 0) { return $l.Substring($i + 1).Trim() }
+  return ""
+}
+# v5.14 : relance d'une appli avec les droits NORMAUX de l'utilisateur et ses arguments d'origine. C'est le bureau de
+# l'Explorateur (non administrateur) qui la lance : plus de fenêtre de l'Explorateur ouverte par erreur. Si ce n'est
+# pas possible : l'Explorateur avec le chemin seul (ancienne méthode), jamais en administrateur.
+$codeLkShell = @'
+using System;
+using System.Reflection;
+using System.Runtime.InteropServices;
+public static class LkShell {
+  [ComImport, Guid("85CB6900-4D95-11CF-960C-0080C7F4EE85"), InterfaceType(ComInterfaceType.InterfaceIsDual)]
+  interface IShellWindows {
+    int Count { get; }
+    [return: MarshalAs(UnmanagedType.IDispatch)] object Item([MarshalAs(UnmanagedType.Struct)] object index);
+    [return: MarshalAs(UnmanagedType.IUnknown)] object _NewEnum();
+    void Register(); void RegisterPending(); void Revoke(); void OnNavigate(); void OnActivated();
+    [return: MarshalAs(UnmanagedType.IDispatch)]
+    object FindWindowSW([MarshalAs(UnmanagedType.Struct)] ref object pvarLoc, [MarshalAs(UnmanagedType.Struct)] ref object pvarLocRoot, int swClass, out int pHwnd, int swfwOptions);
+  }
+  [ComImport, Guid("6D5140C1-7436-11CE-8034-00AA006009FA"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IServProv {
+    [return: MarshalAs(UnmanagedType.IUnknown)] object QueryService(ref Guid guidService, ref Guid riid);
+  }
+  [ComImport, Guid("000214E2-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IShellBrowser {
+    void GetWindow(); void ContextSensitiveHelp(); void InsertMenusSB(); void SetMenuSB(); void RemoveMenusSB();
+    void SetStatusTextSB(); void EnableModelessSB(); void TranslateAcceleratorSB(); void BrowseObject();
+    void GetViewStateStream(); void GetControlWindow(); void SendControlMsg();
+    [return: MarshalAs(UnmanagedType.Interface)] IShellView QueryActiveShellView();
+  }
+  [ComImport, Guid("000214E3-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+  interface IShellView {
+    void GetWindow(); void ContextSensitiveHelp(); void TranslateAccelerator(); void EnableModeless(); void UIActivate();
+    void Refresh(); void CreateViewWindow(); void DestroyViewWindow(); void GetCurrentInfo(); void AddPropertySheetPages();
+    void SaveViewState(); void SelectItem();
+    [return: MarshalAs(UnmanagedType.IDispatch)] object GetItemObject(uint uItem, ref Guid riid);
+  }
+  // Lance un programme avec les droits NORMAUX de l'utilisateur : c'est le bureau de l'Explorateur (non élevé) qui
+  // fait le ShellExecute, avec les arguments d'origine (méthode « ShellWindows / desktop folder view »).
+  public static void Lancer(string fichier, string arguments, string dossier) {
+    Type t = Type.GetTypeFromCLSID(new Guid("9BA05972-F6A8-11CF-A442-00A0C90A8F39"));
+    IShellWindows fenetres = (IShellWindows)Activator.CreateInstance(t);
+    object loc = 0; object racine = null; int hwnd;
+    object bureau = fenetres.FindWindowSW(ref loc, ref racine, 8, out hwnd, 1);
+    if (bureau == null) { throw new InvalidOperationException("bureau de l'Explorateur introuvable"); }
+    Guid sid = new Guid("4C96BE40-915C-11CF-99D3-00AA004AE837");
+    Guid iidBrowser = typeof(IShellBrowser).GUID;
+    IShellBrowser navigateur = (IShellBrowser)((IServProv)bureau).QueryService(ref sid, ref iidBrowser);
+    IShellView vue = navigateur.QueryActiveShellView();
+    Guid iidDispatch = new Guid("00020400-0000-0000-C000-000000000046");
+    object vueDossier = vue.GetItemObject(0, ref iidDispatch);
+    object appli = vueDossier.GetType().InvokeMember("Application", BindingFlags.GetProperty, null, vueDossier, null);
+    appli.GetType().InvokeMember("ShellExecute", BindingFlags.InvokeMethod, null, appli,
+      new object[] { fichier, arguments ?? "", dossier ?? "", "open", 1 });
+  }
+}
+'@
+function Lancer-NonEleve($chemin, $arguments) {
+  $dos = Split-Path -Parent $chemin
+  try {
+    if (-not ("LkShell" -as [type])) { Add-Type -TypeDefinition $codeLkShell -ErrorAction Stop }
+    [LkShell]::Lancer($chemin, "$arguments", $dos); return $true
+  } catch { Log "Relance avec les droits normaux impossible pour $([IO.Path]::GetFileName($chemin)) ($($_.Exception.Message)) : relance par l'Explorateur, sans arguments." }
+  try { [void][Diagnostics.Process]::Start((Join-Path $env:WINDIR "explorer.exe"), "`"$chemin`""); return $true } catch { return $false }
+}
 function Terminer-Session {
   $e = Lire-Session
   if ($e -and "$($e.Plan)" -match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { & powercfg.exe /setactive "$($e.Plan)" 2>$null | Out-Null }
-  $n = 0
-  foreach ($ch in @($e.Relancer)) {
-    if (-not $ch -or -not (Test-Path -LiteralPath "$ch")) { continue }
+  $n = 0; $vus = @()
+  foreach ($r in @($e.Relancer)) {
+    # ancien format (v5.7 à v5.13) : juste le chemin
+    $ch = if ($r -is [string]) { $r } else { "$($r.Chemin)" }; $arg = if ($r -is [string]) { "" } else { "$($r.Args)" }
+    if (-not $ch -or -not (Test-Path -LiteralPath "$ch") -or $vus -contains $ch.ToLower()) { continue }
+    $vus += $ch.ToLower()
     if (@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension("$ch")) -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $sessionUi }).Count) { continue }
-    # relancée par l'Explorateur : avec les droits normaux de l'utilisateur (pas en administrateur)
-    try { [void][Diagnostics.Process]::Start((Join-Path $env:WINDIR "explorer.exe"), "`"$ch`""); $n++ } catch {}
+    if (Lancer-NonEleve $ch $arg) { $n++ }
   }
   Remove-Item -LiteralPath $fichierSession -Force -ErrorAction SilentlyContinue
   Log ((T "Session de jeu terminée : {0} appli(s) relancée(s)") -f $n + $(if ($e.Plan) { ", " + (T "plan d'alimentation remis") } else { "" }) + ".")
@@ -2234,9 +2343,9 @@ $bSe.Add_Click({ Demarrer-Session })
 
 # Profils en un clic (Tableau de bord) : règlent les interrupteurs, modifiables ensuite
 $profils = [ordered]@{
-  gaming    = @{ Nom = "Gaming max"; On = @("debloat","telemetrie","copilot","optim:Alimentation","optim:ModeJeu","optim:PlanifGPU","optim:PrioriteJeux","optim:Souris","optim:VBS","optim:TRIM","optim:NettoyageTemp","optim:Hibernation","optim:AssistantStockage","optim:JeuxFenetres","optim:VRR","optim:DelaiDemarrage","optim:EdgeArrierePlan","optim:Transparence","optim:OptimDistribution") }
-  equilibre = @{ Nom = "Équilibré"; On = @("debloat","telemetrie","optim:ModeJeu","optim:PlanifGPU","optim:PrioriteJeux","optim:Souris","optim:TRIM","optim:NettoyageTemp","optim:AssistantStockage","optim:OptimDistribution","optim:JeuxFenetres","optim:VRR","optim:DelaiDemarrage","optim:EdgeArrierePlan","optim:PlanEquilibre") }
-  portable  = @{ Nom = "PC portable"; On = @("debloat","telemetrie","optim:ModeJeu","optim:PlanifGPU","optim:TRIM","optim:NettoyageTemp","optim:AssistantStockage","optim:Transparence","optim:OptimDistribution","optim:JeuxFenetres","optim:EdgeArrierePlan","optim:PlanEquilibre") }
+  gaming    = @{ Nom = "Gaming max"; On = @("debloat","telemetrie","copilot","optim:PlanEquilibre","optim:ModeAlimPerf","optim:GpuJeux","optim:OptimLecteurs","optim:ModeJeu","optim:PlanifGPU","optim:PrioriteJeux","optim:Souris","optim:VBS","optim:TRIM","optim:NettoyageTemp","optim:Hibernation","optim:AssistantStockage","optim:JeuxFenetres","optim:VRR","optim:DelaiDemarrage","optim:EdgeArrierePlan","optim:Transparence","optim:OptimDistribution") }
+  equilibre = @{ Nom = "Équilibré"; On = @("debloat","telemetrie","optim:ModeJeu","optim:PlanifGPU","optim:PrioriteJeux","optim:Souris","optim:TRIM","optim:NettoyageTemp","optim:AssistantStockage","optim:OptimDistribution","optim:JeuxFenetres","optim:VRR","optim:DelaiDemarrage","optim:EdgeArrierePlan","optim:PlanEquilibre","optim:OptimLecteurs") }
+  portable  = @{ Nom = "PC portable"; On = @("debloat","telemetrie","optim:ModeJeu","optim:PlanifGPU","optim:TRIM","optim:NettoyageTemp","optim:AssistantStockage","optim:Transparence","optim:OptimDistribution","optim:JeuxFenetres","optim:EdgeArrierePlan","optim:PlanEquilibre","optim:GpuJeux","optim:OptimLecteurs") }
 }
 $cles = @("debloat","telemetrie","copilot") + @($optims | ForEach-Object { "optim:$($_[0])" })
 $script:profilChoisi = $null
@@ -2245,7 +2354,7 @@ function Choisir-Profil($k) {
   $script:profilChoisi = $k
   $on = $profils[$k].On
   $script:silencieux = $true
-  try { foreach ($sw in $toggles) { if ($cles -contains $sw.Tag.Cle) { $sw.Checked = ($on -contains $sw.Tag.Cle) } } } finally { $script:silencieux = $false }
+  try { foreach ($sw in $toggles) { if ($cles -contains $sw.Tag.Cle -and -not $sw.Tag.Indispo) { $sw.Checked = ($on -contains $sw.Tag.Cle) } } } finally { $script:silencieux = $false }
   foreach ($kk in $pillules.Keys) { $pillules[$kk].Selected = ($kk -eq $k); $pillules[$kk].Invalidate() }
   Log "Profil « $(T $profils[$k].Nom) » sélectionné (modifiable avant d'appliquer)."
 }
@@ -2444,7 +2553,7 @@ function Remplir-Demarrage2($r) {
   }
   # Tâches planifiées lancées à l'ouverture de session / au démarrage (information seulement)
   $taches = @($r.Taches)
-  Section $pg $y "TÂCHES PLANIFIÉES AU DÉMARRAGE (INFORMATION)"; $y += 28
+  Section $pg $y "TÂCHES PLANIFIÉES AU DÉMARRAGE (POUR LES DÉSACTIVER : SYSTÈME › RÉPARER)"; $y += 28
   $c = New-Object LkCard; $c.Fill = $cCarte; $c.Radius = S 12; $c.Location = Pt 0 $y
   $txt = if ($taches.Count) { ($taches | Select-Object -First 12) -join "`n" } else { T "Aucune tâche planifiée tierce au démarrage." }
   $n = [math]::Max(1, [math]::Min(12, $taches.Count))
@@ -2585,7 +2694,7 @@ function Texte-DnsActuel {
   $l = @()
   foreach ($a in Cartes-Actives) {
     $srv = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex | ForEach-Object { $_.ServerAddresses }) | Where-Object { $_ -and $_ -notmatch '^fec0:' }
-    $manuel = "$((Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$($a.InterfaceGuid)" -Name NameServer).NameServer)".Trim()
+    $manuel = "$(Dns-Manuel $a.InterfaceGuid 'ipv4')$(Dns-Manuel $a.InterfaceGuid 'ipv6')".Trim()   # v5.14 : clé {guid}
     $l += "$($a.Name) : $(if ($srv) { ($srv | Select-Object -First 4) -join ', ' } else { '-' })  ($(if ($manuel) { T 'manuel' } else { T 'automatique' }))"
   }
   if (-not $l.Count) { return (T "Aucune carte réseau physique connectée.") }
@@ -2638,11 +2747,12 @@ function Appliquer-Dns($k) {
 $bDnsAppl.Add_Click({ [void](Appliquer-Dns $script:dnsSel) })
 $bDnsCache.Add_Click({ Clear-DnsClientCache; & ipconfig.exe /flushdns | Out-Null; Log "Cache DNS vidé."; [void](Boite (T "Cache DNS vidé.")) })
 # v5.1 : la 1re lecture des cartes réseau peut prendre 30 s (module NetTCPIP) : elle se fait en arrière-plan
-$codeDns = [scriptblock]::Create("function Cartes-Actives {`n" + ${function:Cartes-Actives}.ToString() + "`n}`n" + {
+# v5.14 : « manuel / automatique » lu avec Dns-Manuel (clé {guid} avec accolades), comme pour « Tout annuler »
+$codeDns = [scriptblock]::Create("function Cartes-Actives {`n" + ${function:Cartes-Actives}.ToString() + "`n}`nfunction Ouvrir-Cle {`n" + ${function:Ouvrir-Cle}.ToString() + "`n}`nfunction Dns-Manuel {`n" + ${function:Dns-Manuel}.ToString() + "`n}`n" + {
   $l = @()
   foreach ($a in Cartes-Actives) {
     $srv = @(Get-DnsClientServerAddress -InterfaceIndex $a.ifIndex | ForEach-Object { $_.ServerAddresses }) | Where-Object { $_ -and $_ -notmatch '^fec0:' }
-    $manuel = "$((Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$($a.InterfaceGuid)" -Name NameServer -ErrorAction SilentlyContinue).NameServer)".Trim()
+    $manuel = "$(Dns-Manuel $a.InterfaceGuid 'ipv4')$(Dns-Manuel $a.InterfaceGuid 'ipv6')".Trim()
     $l += [pscustomobject]@{ Nom = "$($a.Name)"; Srv = (@($srv | Select-Object -First 4) -join ', '); Manuel = [bool]$manuel }
   }
   , $l
@@ -2830,6 +2940,214 @@ function Remplir-Sante2($r) {
 }
 $pSante = NouvellePage "sante" "Santé" "État des disques, de l'espace libre, de la température et de la mémoire." -Defile -Construire { Construire-Sante }
 
+# ===================== v5.14 : MATÉRIEL > DIAGNOSTIC (lecture seule) =====================
+# Vérifications du matériel et de Windows : RIEN n'est modifié. Chaque carte dit ce qui est lu, si c'est bon (vert)
+# ou à revoir (orange), et quoi faire. Les vérifications qui ne concernent pas ce PC ne sont pas affichées.
+$codeDiagnostic = {
+  . $cheminSauvegarde
+  $r = [ordered]@{}
+  # 1. Mémoire : nombre de barrettes et canaux (lus dans les étiquettes du BIOS)
+  try {
+    $mods = @(Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop)
+    $canaux = @(foreach ($m in $mods) {
+      $t = "$($m.BankLabel) $($m.DeviceLocator)"
+      if ($t -match '(?i)channel\s*([A-H])\b') { $matches[1].ToUpper() } elseif ($t -match '(?i)DIMM[_\s-]?([A-H])[0-9]') { $matches[1].ToUpper() } elseif ($t -match '(?i)\b([A-H])[0-9]\b') { $matches[1].ToUpper() }
+    }) | Select-Object -Unique
+    $r.Memoire = [pscustomobject]@{ Barrettes = $mods.Count; Canaux = @($canaux); Go = [math]::Round([double](($mods | Measure-Object Capacity -Sum).Sum) / 1GB) }
+  } catch {}
+  # 2. Lien PCIe de la carte graphique dédiée (largeur seulement : la vitesse baisse au repos, c'est normal)
+  try {
+    function Props($id) { $h = @{}; foreach ($p in @(Get-PnpDeviceProperty -InstanceId $id -ErrorAction SilentlyContinue)) { $h["$($p.KeyName)"] = $p.Data }; $h }
+    function Val($h, $motif) { foreach ($k in @($h.Keys)) { if ($k -match $motif -and $null -ne $h[$k]) { return $h[$k] } }; $null }
+    foreach ($g in @($gpusDedies)) {
+      $ven = if ("$($g.Id)" -match 'VEN_([0-9A-Fa-f]{4})') { $matches[1] } else { "????" }
+      $chaine = @(); $id = "$($g.Id)"
+      for ($i = 0; $i -lt 10 -and $id -like 'PCI\*'; $i++) {
+        $h = Props $id
+        $chaine += [pscustomobject]@{ Id = $id; Act = (Val $h '(?i)PciDevice_CurrentLinkWidth$|3ab22e31-8264-4b4e-9af5-a8d2d8e33e62\}\s*10$'); Max = (Val $h '(?i)PciDevice_MaxLinkWidth$|3ab22e31-8264-4b4e-9af5-a8d2d8e33e62\}\s*12$') }
+        $id = "$(Val $h '(?i)^DEVPKEY_Device_Parent$')"
+      }
+      if (-not $chaine.Count) { continue }
+      # la carte peut contenir son propre « commutateur » PCIe (Radeon) : on remonte tant que c'est le même fabricant
+      $k = 0; while ($k + 1 -lt $chaine.Count -and $chaine[$k + 1].Id -match "VEN_$ven") { $k++ }
+      $haut = $chaine[$k]; $port = if ($k + 1 -lt $chaine.Count) { $chaine[$k + 1] } else { $null }
+      if ($haut.Act -and $haut.Max) {
+        $r.Pcie = [pscustomobject]@{ Nom = "$($g.Nom)"; Actuel = [int]$haut.Act; MaxCarte = [int]$haut.Max; MaxPort = $(if ($port -and $port.Max) { [int]$port.Max } else { 0 }) }
+        break
+      }
+    }
+  } catch {}
+  if ($cpuAmd) {
+    # 3. Pilote chipset AMD (gestion d'énergie « PPM Provisioning » = paquet AMD Chipset Drivers installé)
+    try {
+      $drv = @(Get-CimInstance Win32_PnPSignedDriver -Filter "DriverProviderName LIKE '%Advanced Micro Devices%' OR DriverProviderName = 'AMD'" -ErrorAction Stop)
+      $ppm = @($drv | Where-Object { "$($_.DeviceName)" -match 'PPM Provisioning' } | Select-Object -First 1)
+      $autres = @($drv | Where-Object { "$($_.DeviceName)" -match 'I2C|GPIO|PSP|SMBus|SFH|Chipset|Power|PCI' }).Count
+      $inconnus = @(Get-CimInstance Win32_PnPEntity -Filter "ConfigManagerErrorCode <> 0" -ErrorAction SilentlyContinue | Where-Object { "$($_.DeviceID)" -match '^ACPI\\AMDI' }).Count
+      $date = $null; if ($ppm.Count -and $ppm[0].DriverDate) { try { $date = [datetime]$ppm[0].DriverDate } catch {} }
+      $r.Chipset = [pscustomobject]@{ Ppm = [bool]$ppm.Count; Version = $(if ($ppm.Count) { "$($ppm[0].DriverVersion)" } else { "" }); Date = $date; Autres = $autres; Inconnus = $inconnus }
+    } catch {}
+    # 4. Ryzen X3D à 2 groupes de cœurs (7900X3D, 7950X3D, 9900X3D, 9950X3D...) : les jeux doivent aller sur le cache 3D
+    if ($coeurs -ge 12 -and "$cpuNom" -match 'X3D') {
+      try {
+        $vc = @(Get-CimInstance Win32_PnPEntity -Filter "Name LIKE '%V-Cache%'" -ErrorAction SilentlyContinue)
+        $svc = Get-Service amd3dvcacheSvc -ErrorAction SilentlyContinue
+        $gm = $null; try { $gm = (Get-ItemProperty "HKCU:\Software\Microsoft\GameBar" -Name AutoGameModeEnabled -ErrorAction Stop).AutoGameModeEnabled } catch {}
+        $gb = $null; try { $gb = [bool]@(Get-AppxPackage -Name Microsoft.XboxGamingOverlay -ErrorAction Stop).Count } catch {}
+        $r.X3D = [pscustomobject]@{ Pilote = [bool]@($vc | Where-Object { $_.ConfigManagerErrorCode -eq 0 }).Count; Service = $(if ($svc) { "$($svc.Status)" } else { "" }); ModeJeu = (($null -eq $gm) -or ($gm -ne 0)); GameBar = $gb }
+      } catch {}
+    }
+  }
+  # 5. Version de Windows (optimisation Ryzen : 24H2, ou 23H2 / 22H2 avec la mise à jour d'août 2024)
+  try { $cv = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction Stop; $r.Windows = [pscustomobject]@{ Build = [int]$cv.CurrentBuild; Ubr = [int]$cv.UBR; Version = "$($cv.DisplayVersion)" } } catch {}
+  # 6. Jeux Steam / Epic installés sur un disque dur
+  try {
+    $jeux = @(Lister-BibliothequesJeux); $parLettre = @{}
+    foreach ($j in $jeux) { $l = "$($j.Dossier)".Substring(0, 1).ToUpper(); if ($l -match '^[A-Z]$') { $parLettre[$l] = 1 + [int]$parLettre[$l] } }
+    $hdd = @()
+    foreach ($l in @($parLettre.Keys)) {
+      $type = ""; try { $type = "$(@(Get-Partition -DriveLetter $l -ErrorAction Stop | Get-Disk | Get-PhysicalDisk)[0].MediaType)" } catch {}
+      if ($type -eq "HDD") { $hdd += [pscustomobject]@{ Lettre = $l; Jeux = $parLettre[$l] } }
+    }
+    $r.Jeux = [pscustomobject]@{ Total = $jeux.Count; Hdd = @($hdd) }
+  } catch {}
+  [pscustomobject]$r
+}
+function Vars-Diagnostic {
+  $ded = @($tousGpu | Where-Object { "$($_.PNPDeviceID)" -match 'VEN_10DE' -or ("$($_.PNPDeviceID)" -match 'VEN_1002' -and "$($_.Name)" -match '\bRX\s?\d|Radeon Pro|FirePro|Radeon VII|\bR9\s|\bR7\s\d') } | ForEach-Object { [pscustomobject]@{ Id = "$($_.PNPDeviceID)"; Nom = "$($_.Name)" } })
+  @{ cheminSauvegarde = (Join-Path $dir "Sauvegarde-Reglages.ps1"); cpuAmd = ($cpuMarque -eq "AMD"); cpuNom = $cpuNom; coeurs = [int]$cpu.NumberOfCores; gpusDedies = $ded }
+}
+function Item-Diag($titre, $etat, $statut, $detail, $conseil = "", $bouton = "", $action = $null) { [pscustomobject]@{ Titre = $titre; Etat = $etat; Statut = $statut; Detail = $detail; Conseil = $conseil; Bouton = $bouton; Action = $action } }
+$actionAmd = { Start-Process "https://www.amd.com/fr/support/download/drivers.html" }
+$actionWU = { Start-Process "ms-settings:windowsupdate" }
+# Textes (traduits) à partir de ce qui a été lu
+function Items-Diagnostic($r) {
+  $l = New-Object System.Collections.ArrayList
+  $m = $r.Memoire
+  if ($m -and $m.Barrettes) {
+    $can = @($m.Canaux); $tit = T "Mémoire en dual channel"
+    if ($m.Barrettes -eq 1) {
+      if ($portable) { [void]$l.Add((Item-Diag $tit "info" (T "1 module détecté") ((T "{0} Go sur un seul module détecté.") -f $m.Go) "Sur un portable, une partie de la mémoire peut être soudée : vérifie la fiche technique avant d'ajouter une barrette.")) }
+      else { [void]$l.Add((Item-Diag $tit "alerte" (T "Single channel") ((T "Une seule barrette ({0} Go) : la mémoire n'utilise qu'un canal, débit divisé par deux.") -f $m.Go) "Ajoute une 2e barrette identique (même taille, même vitesse) : gain net en jeu.")) }
+    } elseif ($can.Count -ge 2) { [void]$l.Add((Item-Diag $tit "ok" (T "Dual channel") ((T "{0} barrettes sur les canaux {1} ({2} Go).") -f $m.Barrettes, ($can -join ", "), $m.Go))) }
+    elseif ($can.Count -eq 1) { [void]$l.Add((Item-Diag $tit "alerte" (T "Même canal") ((T "{0} barrettes, toutes sur le canal {1} : la mémoire n'utilise qu'un canal.") -f $m.Barrettes, $can[0]) "PC éteint : place-les dans les emplacements conseillés par le manuel de la carte mère (souvent A2 et B2, les 2e et 4e en partant du processeur)." "Guide BIOS" { Afficher "bios" })) }
+    else { [void]$l.Add((Item-Diag $tit "ok" (T "Dual channel probable") ((T "{0} barrettes ({1} Go). Ce PC n'indique pas les canaux : très probablement en dual channel.") -f $m.Barrettes, $m.Go))) }
+  }
+  $p = $r.Pcie
+  if ($p) {
+    $tit = T "Lien PCIe de la carte graphique"
+    $att = if ($p.MaxPort -gt 0) { [math]::Min($p.MaxCarte, $p.MaxPort) } else { $p.MaxCarte }
+    if ($p.Actuel -lt $att) { [void]$l.Add((Item-Diag $tit "alerte" ((T "x{0} au lieu de x{1}") -f $p.Actuel, $att) ((T "{0} : lien en x{1}, alors que la carte et son emplacement acceptent x{2}.") -f $p.Nom, $p.Actuel, $att) "PC éteint et débranché : vérifie que la carte est bien enfoncée et verrouillée. Certains emplacements partagent leurs lignes avec un SSD M.2 : regarde le manuel de la carte mère.")) }
+    elseif ($p.MaxPort -gt 0 -and $p.MaxPort -lt $p.MaxCarte) { [void]$l.Add((Item-Diag $tit "alerte" ((T "Emplacement x{0}") -f $p.MaxPort) ((T "{0} accepte x{1}, mais son emplacement est limité à x{2}.") -f $p.Nom, $p.MaxCarte, $p.MaxPort) "Mets la carte dans le 1er emplacement PCIe x16, le plus proche du processeur.")) }
+    else { [void]$l.Add((Item-Diag $tit "ok" ("x$($p.Actuel)") ((T "{0} : lien en x{1}, le maximum possible. La vitesse du lien baisse au repos : c'est normal.") -f $p.Nom, $p.Actuel))) }
+  }
+  $c = $r.Chipset
+  if ($c) {
+    $tit = T "Pilote chipset AMD"; $sup = if ($c.Inconnus) { " · " + ((T "{0} périphérique(s) AMD sans pilote.") -f $c.Inconnus) } else { "" }
+    $conseil = "Installe le dernier paquet « AMD Chipset Drivers » pour ta carte mère (site AMD ; sur un portable, site du fabricant du PC)."
+    if ($c.Ppm -and -not $c.Inconnus) {
+      $vieux = $c.Date -and ((Get-Date) - $c.Date).TotalDays -gt 548
+      [void]$l.Add((Item-Diag $tit $(if ($vieux) { "info" } else { "ok" }) (T "Installé") (((T "Gestion d'énergie AMD présente (version {0}).") -f $c.Version) + $(if ($c.Date) { " " + ((T "Date : {0}.") -f $c.Date.ToString("dd/MM/yyyy")) } else { "" })) $(if ($vieux) { "Pilote de plus de 18 mois : installe le dernier paquet AMD Chipset Drivers." } else { "" }) $(if ($vieux) { "Site AMD" } else { "" }) $actionAmd))
+    }
+    elseif ($c.Ppm) { [void]$l.Add((Item-Diag $tit "alerte" (T "Incomplet") ((T "Gestion d'énergie AMD présente.") + $sup) $conseil "Site AMD" $actionAmd)) }
+    elseif ($c.Autres) { [void]$l.Add((Item-Diag $tit "alerte" (T "Incomplet") ((T "Pilotes AMD de base présents, mais pas la gestion d'énergie AMD (PPM Provisioning).") + $sup) $conseil "Site AMD" $actionAmd)) }
+    else { [void]$l.Add((Item-Diag $tit "alerte" (T "Absent") ((T "Windows utilise des pilotes génériques pour le chipset.") + $sup) $conseil "Site AMD" $actionAmd)) }
+  }
+  $x = $r.X3D
+  if ($x) {
+    $tit = T "Ryzen X3D : jeux sur le cache 3D"; $manque = @()
+    if (-not $x.Pilote) { $manque += T "pilote AMD 3D V-Cache absent" }
+    if ($x.Service -and $x.Service -ne "Running") { $manque += T "service AMD 3D V-Cache arrêté" }
+    if (-not $x.ModeJeu) { $manque += T "Mode Jeu désactivé" }
+    if ($x.GameBar -eq $false) { $manque += T "Xbox Game Bar désinstallée" }
+    if (-not $manque.Count) { [void]$l.Add((Item-Diag $tit "ok" (T "Prêt") (T "Pilote V-Cache, Mode Jeu et Game Bar présents : les jeux vont sur les cœurs avec le cache 3D."))) }
+    else { [void]$l.Add((Item-Diag $tit "alerte" (T "À corriger") ($manque -join " · ") "Installe le dernier pilote chipset AMD, laisse le Mode Jeu activé et la Xbox Game Bar installée (même sans l'utiliser). BIOS : « CPPC Dynamic Preferred Cores » sur Driver ou Auto." "Site AMD" $actionAmd)) }
+  }
+  $w = $r.Windows
+  if ($w -and $cpuMarque -eq "AMD" -and $w.Build) {
+    $tit = T "Windows et Ryzen"; $bu = "$($w.Build).$($w.Ubr)"
+    if ($w.Build -ge 26100) { [void]$l.Add((Item-Diag $tit "ok" (T "À jour") ((T "Windows 11 {0} (build {1}) : optimisation Ryzen incluse.") -f $w.Version, $bu))) }
+    elseif ($w.Build -ge 22621 -and $w.Ubr -ge 4112) { [void]$l.Add((Item-Diag $tit "ok" (T "À jour") ((T "Windows 11 {0} (build {1}) avec la mise à jour d'août 2024 : optimisation Ryzen incluse.") -f $w.Version, $bu))) }
+    elseif ($w.Build -ge 22621) { [void]$l.Add((Item-Diag $tit "alerte" (T "Mise à jour à installer") ((T "Windows 11 {0} (build {1}) sans la mise à jour d'août 2024 (KB5041587) qui accélère les Ryzen.") -f $w.Version, $bu) "Paramètres > Windows Update : installe les mises à jour, ou passe à Windows 11 24H2." "Windows Update" $actionWU)) }
+    elseif ($w.Build -ge 22000) { [void]$l.Add((Item-Diag $tit "alerte" (T "Trop ancien") ((T "Windows 11 21H2 (build {0}) : plus mis à jour, sans l'optimisation Ryzen.") -f $bu) "Paramètres > Windows Update : passe à la dernière version de Windows 11." "Windows Update" $actionWU)) }
+    else { [void]$l.Add((Item-Diag $tit "alerte" (T "Windows 10") ((T "Windows 10 (build {0}) : pas d'optimisation Ryzen récente, plus suivi depuis octobre 2025.") -f $bu) "Passe à Windows 11 si ton PC est compatible (Paramètres > Windows Update)." "Windows Update" $actionWU)) }
+  }
+  $j = $r.Jeux
+  if ($j -and $j.Total) {
+    $tit = T "Jeux sur disque dur"; $h = @($j.Hdd)
+    if ($h.Count) {
+      $n = 0; foreach ($e in $h) { $n += [int]$e.Jeux }
+      [void]$l.Add((Item-Diag $tit "alerte" ((T "{0} jeu(x) sur HDD") -f $n) ((T "Lecteur(s) {0} : disque dur. Chargements plus longs et saccades possibles dans les jeux récents.") -f ((@($h | ForEach-Object { "$($_.Lettre):" })) -join ", ")) "Déplace les jeux récents vers un SSD (Steam : clic droit sur le jeu > Propriétés > Fichiers installés > Déplacer)."))
+    } else { [void]$l.Add((Item-Diag $tit "ok" (T "Sur SSD") ((T "{0} jeu(x) Steam / Epic trouvé(s), aucun sur un disque dur.") -f $j.Total))) }
+  }
+  # 7. Écran à fréquence variable : limite d'images/s conseillée (Hz - 3, ou environ 3 % sous la fréquence au-delà de 240 Hz)
+  $hz = 0; try { $fr = [LkNative]::Frequences(); if ($fr) { $hz = [int]$fr[0] } } catch {}
+  if ($hz -gt 60) {
+    $cap = if ($hz -le 240) { $hz - 3 } else { [int][math]::Floor($hz * 0.97) }
+    $marque = "$(@($gpus)[0].Name)"
+    $cons = if ($marque -match 'NVIDIA|GeForce|RTX|GTX') { (T "Panneau de configuration NVIDIA : G-SYNC activé et synchronisation verticale activée ; dans le jeu : V-Sync coupé, limite à {0} images/s.") -f $cap }
+            elseif ($marque -match 'Radeon|AMD') { (T "Logiciel AMD : FreeSync activé, attente de synchronisation verticale « toujours activée » ; dans le jeu : V-Sync coupé, limite à {0} images/s.") -f $cap }
+            else { (T "Active FreeSync / G-Sync dans le menu de l'écran et le logiciel de la carte graphique, puis limite le jeu à {0} images/s.") -f $cap }
+    [void]$l.Add((Item-Diag (T "Écran à fréquence variable (FreeSync / G-Sync)") "info" ((T "Conseil : {0} im/s") -f $cap) ((T "Écran à {0} Hz : limiter les images/s à {1} garde la fréquence variable active (moins de latence, pas de déchirure).") -f $hz, $cap) $cons))
+  }
+  return @($l)
+}
+# Carte de diagnostic : icône + titre + état à droite + ce qui est lu + quoi faire (+ bouton)
+function Carte-Diag($pg, $y, $it) {
+  $coul = switch ($it.Etat) { "ok" { $cVert } "alerte" { $cOrange } default { $cAccentClair } }
+  $ico = switch ($it.Etat) { "ok" { "check-circle" } "alerte" { "alert" } default { "info" } }
+  $h = if ($it.Conseil) { 94 } else { 62 }
+  $c = New-Object LkCard; $c.Fill = $cCarte; $c.Radius = S 12; $c.Location = Pt 0 $y; $c.Size = Sz 920 $h
+  [void](Icone $c $ico 14 13 36 36 19 $coul $cCarte -Puce $coul)
+  [void](Lbl $c $it.Titre 62 11 480 22 (Police 14 "Bold") $cBlanc $cCarte)
+  $e = Lbl $c $it.Statut 552 11 352 22 (Police 13) $coul $cCarte; $e.TextAlign = "TopRight"
+  $wT = if ($it.Bouton) { 680 } else { 842 }
+  [void](Lbl $c $it.Detail 62 33 $wT 18 (Police 12) $cGris $cCarte)
+  if ($it.Conseil) { [void](Lbl $c ((T "À faire") + " : " + (T $it.Conseil)) 62 54 $wT 36 (Police 12) $cBlanc $cCarte) }
+  if ($it.Bouton) { $b = Bouton $c $it.Bouton 756 ($h - 44) 148 34; $b.Tag = $it.Action; $b.Add_Click({ if ($this.Tag) { & $this.Tag } }) }
+  $tip.SetToolTip($c, (T $it.Titre) + "`n" + $it.Detail + $(if ($it.Conseil) { "`n`n" + (T "À faire") + " : " + (T $it.Conseil) } else { "" }))
+  $pg.Controls.Add($c)
+  return ($h + 8)
+}
+function Lancer-Diagnostic {
+  if ($script:lectureDiag) { return }
+  $script:lectureDiag = $true
+  En-Fond "diagnostic" $codeDiagnostic (Vars-Diagnostic) { param($r)
+    $script:lectureDiag = $false; $script:diagRes = $r
+    try { $script:diagItems = @(Items-Diagnostic $r); $script:scoreDiag = @($script:diagItems | Where-Object { $_.Etat -eq "alerte" }).Count } catch { $script:diagItems = @(); Log "Diagnostic : $($_.Exception.Message)" }
+    try { Maj-Score } catch {}
+    if ($pages["diagnostic"].Construite) { Remplir-Diagnostic $r }
+  }
+}
+function Construire-Diagnostic {
+  if ($script:diagRes) { Remplir-Diagnostic $script:diagRes; return }
+  [void](Chargement $pDiag (T "Vérification du matériel et de Windows..."))
+  Lancer-Diagnostic
+}
+function Remplir-Diagnostic($r) {
+  Geler $pages["diagnostic"].Panel $true
+  try { Remplir-Diagnostic2 $r } finally { Geler $pages["diagnostic"].Panel $false }
+}
+function Remplir-Diagnostic2($r) {
+  $pg = $pDiag; Vider $pg
+  $bMaj = Bouton $pg "Actualiser" 760 0 160 34; $bMaj.Icon = "refresh"
+  $bMaj.Add_Click({ $script:diagRes = $null; [void](Chargement $pDiag (T "Vérification du matériel et de Windows...")); Lancer-Diagnostic })
+  if (-not $r) { [void](Lbl $pg "Le diagnostic n'a pas pu être fait (voir le Journal)." 4 6 700 22 (Police 13 "Bold") $cOrange $cFond); return }
+  $items = @($script:diagItems)
+  $na = @($items | Where-Object { $_.Etat -eq "alerte" }).Count
+  $resume = if ($na) { (T "{0} point(s) à revoir (en orange). Rien n'est modifié : suis le conseil de chaque carte.") -f $na } else { T "Rien à signaler." }
+  $cR = if ($na) { $cOrange } else { $cVert }
+  [void](Icone $pg $(if ($na) { "alert" } else { "check-circle" }) 2 5 24 24 18 $cR $cFond)
+  [void](Lbl $pg $resume 30 6 700 22 (Police 13 "Bold") $cR $cFond)
+  $y = 44
+  Section $pg $y "VÉRIFICATIONS (LECTURE SEULE)"; $y += 28
+  foreach ($it in $items) { $y += Carte-Diag $pg $y $it }
+  if (-not $items.Count) { [void](Lbl $pg "Aucune vérification ne concerne ce PC." 4 $y 700 22 (Police 12) $cGris $cFond) }
+  $pages["diagnostic"].Panel.Recalc()
+  Log "Diagnostic du matériel : $resume"
+}
+$pDiag = NouvellePage "diagnostic" "Diagnostic" "Vérifications du matériel et de Windows, avec quoi faire. Lecture seule : rien n'est modifié." -Defile -Construire { Construire-Diagnostic }
+
 # ===================== SYSTÈME > RÉPARATION ET SÉCURITÉ =====================
 $pSys = NouvellePage "sysoutils" "Système" "Stockage, réparation, sécurité et raccourcis Windows." -Defile
 $gS = Grille $pSys
@@ -2857,6 +3175,111 @@ foreach ($o in $outils) {
   foreach ($el in $oo.Elements) { $el.Tag = $o[1]; $el.Add_Click({ & $actionsOutils[$this.Tag] }) }
   $yS += 70
 }
+
+# ===================== v5.14 : SYSTÈME > RÉPARER =====================
+# Réglages laissés par d'autres « optimiseurs » (cochés = remis à la valeur de Windows au prochain APPLIQUER),
+# état de Windows Update / Defender / Optimisation de la distribution (LU seulement, jamais modifié) et tâches
+# planifiées d'autres éditeurs (cochées = désactivées). Tout est décoché par défaut et annulable (« Tout annuler »).
+$codeReparer = {
+  . $cheminReparer
+  [pscustomobject]@{ Problemes = @(Detecter-Problemes); Etats = @(Lire-EtatsProteges); Taches = @(Lister-TachesTierces) }
+}
+function Vars-Reparer { @{ cheminReparer = (Join-Path $dir "Reparer-Reglages.ps1") } }
+$nomsServicesRep = @{ SysMain = "SysMain (lancement rapide des applis)"; WSearch = "Windows Search (recherche du menu Démarrer)"; Spooler = "Spouleur d'impression (pour imprimer)"; bthserv = "Bluetooth (manettes, casques, souris)"; Audiosrv = "Audio Windows (le son)"; AudioEndpointBuilder = "Périphériques audio (le son)"; Themes = "Thèmes (apparence de Windows)" }
+# Titre + description (traduits) d'un réglage à réparer
+function Texte-Reparation($pb) {
+  $v = "$($pb.Valeur)"
+  switch -Wildcard ($pb.Id) {
+    "bcd:useplatformclock"   { return @((T "Horloge de démarrage forcée (useplatformclock)"), ((T "Valeur : {0}. Horloge lente réservée au débogage : peut faire perdre des images/s. Réparer = valeur de Windows (après redémarrage).") -f $v)) }
+    "bcd:useplatformtick"    { return @((T "Minuterie forcée (useplatformtick)"), ((T "Valeur : {0}. Réglage de débogage sans gain prouvé. Réparer = valeur de Windows (après redémarrage).") -f $v)) }
+    "bcd:disabledynamictick" { return @((T "Minuterie dynamique coupée (disabledynamictick)"), ((T "Valeur : {0}. Aucun gain prouvé, plus de consommation. Réparer = valeur de Windows (après redémarrage).") -f $v)) }
+    "bcd:tscsyncpolicy"      { return @((T "Synchronisation d'horloge forcée (tscsyncpolicy)"), ((T "Valeur : {0}. Réglage de débogage sans gain prouvé. Réparer = valeur de Windows (après redémarrage).") -f $v)) }
+    "pagefile" {
+      $d = if ($v -eq "0") { T "Aucun fichier d'échange : plantages possibles quand la mémoire est pleine." } else { (T "Limité à {0} Mo : plantages possibles quand la mémoire est pleine.") -f $v }
+      return @((T "Fichier d'échange absent ou trop petit"), ($d + " " + (T "Réparer = taille gérée par Windows (après redémarrage).")))
+    }
+    "svc:*" {
+      $s = $pb.Id.Substring(4); $nomS = if ($nomsServicesRep[$s]) { T $nomsServicesRep[$s] } else { $s }
+      $d = T "Désactivé, souvent par un autre optimiseur. Réparer = démarrage par défaut de Windows."
+      if ($s -eq "Spooler") { $d += " " + (T "Ne répare que si tu imprimes.") }
+      return @(((T "Service désactivé : {0}") -f $nomS), $d)
+    }
+    "mmagent"     { return @((T "Compression de la mémoire coupée"), (T "Windows compresse la mémoire peu utilisée au lieu d'écrire sur le disque : la couper ne fait rien gagner. Réparer = la réactiver.")) }
+    "tachedefrag" { return @((T "« Optimiser les lecteurs » désactivé"), (T "Tâche Windows qui garde les SSD rapides (TRIM) chaque semaine. Réparer = la réactiver.")) }
+    "reg:nti"     { return @((T "Limitation réseau multimédia modifiée"), ((T "NetworkThrottlingIndex = {0}. Aucun gain prouvé, peut gêner le son et le réseau. Réparer = valeur de Windows (10).") -f $v)) }
+    "reg:prio"    { return @((T "Priorité des processus modifiée"), ((T "Win32PrioritySeparation = {0}. Valeur « magique » sans gain mesuré. Réparer = valeur de Windows (2).") -f $v)) }
+    "reg:spectre" { return @((T "Protections du processeur coupées (Spectre / Meltdown)"), (T "Risque de sécurité, gain nul ou très faible sur un processeur récent. Réparer = protections rendues à Windows (après redémarrage).")) }
+  }
+  return @("$($pb.Id)", $v)
+}
+$quandTaches = @{ logon = "à l'ouverture de session"; boot = "au démarrage du PC"; schedule = "à heure fixe"; idle = "quand le PC est inactif"; time = "à une date ou en boucle"; event = "sur un événement"; other = "autre déclencheur" }
+function Texte-StartType($t) { switch ("$t") { "Automatic" { T "automatique" } "Manual" { T "manuel" } "Disabled" { T "désactivé" } default { "$t" } } }
+function Lancer-Reparer {
+  if ($script:lectureRep) { return }
+  $script:lectureRep = $true
+  En-Fond "reparer" $codeReparer (Vars-Reparer) { param($r)
+    $script:lectureRep = $false; $script:reparRes = $r
+    $script:scoreReparer = if ($r) { @($r.Problemes | Where-Object { $_ }).Count } else { $null }
+    try { Maj-Score } catch {}
+    if ($pages["reparer"].Construite) { Remplir-Reparer $r }
+  }
+}
+function Construire-Reparer {
+  if ($script:reparRes) { Remplir-Reparer $script:reparRes; return }
+  [void](Chargement $pRep (T "Recherche des réglages laissés par d'autres optimiseurs..."))
+  Lancer-Reparer
+}
+function Remplir-Reparer($r) {
+  Geler $pages["reparer"].Panel $true
+  try { Remplir-Reparer2 $r } finally { Geler $pages["reparer"].Panel $false }
+  MajCompteur
+}
+function Remplir-Reparer2($r) {
+  # les anciens interrupteurs de cette page sont retirés (la page est reconstruite à chaque lecture)
+  foreach ($sw in @($toggles)) { if ("$($sw.Tag.Cle)" -like "repar:*" -or "$($sw.Tag.Cle)" -like "tache:*") { $script:toggles.Remove($sw) } }
+  $pg = $pRep; Vider $pg
+  $bMaj = Bouton $pg "Actualiser" 760 0 160 34; $bMaj.Icon = "refresh"
+  $bMaj.Add_Click({ if ($script:enCours) { return }; $script:reparRes = $null; [void](Chargement $pRep (T "Recherche des réglages laissés par d'autres optimiseurs...")); Lancer-Reparer })
+  if (-not $r) { [void](Lbl $pg "La recherche n'a pas pu être faite (voir le Journal)." 4 6 700 22 (Police 13 "Bold") $cOrange $cFond); return }
+  $probs = @($r.Problemes | Where-Object { $_ })
+  $resume = if ($probs.Count) { (T "{0} réglage(s) nuisible(s) trouvé(s) : coche ceux à réparer, puis APPLIQUER.") -f $probs.Count } else { T "Aucun réglage nuisible trouvé." }
+  $cR = if ($probs.Count) { $cOrange } else { $cVert }
+  [void](Icone $pg $(if ($probs.Count) { "alert" } else { "check-circle" }) 2 5 24 24 18 $cR $cFond)
+  [void](Lbl $pg $resume 30 6 700 22 (Police 13 "Bold") $cR $cFond)
+  $y = 44
+  Section $pg $y "RÉGLAGES LAISSÉS PAR D'AUTRES OPTIMISEURS"; $y += 30
+  foreach ($pb in $probs) {
+    $tx = Texte-Reparation $pb
+    [void](Ligne $pg $y $tx[0] $tx[1] $false $null "repar:$($pb.Id)" -Badge "s"); $y += 84
+  }
+  if (-not $probs.Count) { $y += Carte-Diag $pg $y (Item-Diag (T "Rien à réparer") "ok" (T "OK") (T "Aucun réglage de démarrage, service, fichier d'échange ou valeur « magique » nuisible trouvé.")) }
+  $y += 4
+  Section $pg $y "WINDOWS UPDATE, DEFENDER, DISTRIBUTION (LECTURE SEULE, JAMAIS MODIFIÉS)"; $y += 30
+  foreach ($e in @($r.Etats | Where-Object { $_ })) {
+    switch ($e.Id) {
+      "wuauserv" { $tit = T "Windows Update"; $det = if ($e.Ok) { (T "Démarrage : {0}. LuKZyR n'y touche jamais.") -f (Texte-StartType $e.Demarrage) } else { T "Désactivé par un autre outil : plus de mises à jour de sécurité. Réactive-le avec l'outil qui l'a coupé." } }
+      "DoSvc"    { $tit = T "Optimisation de la distribution (service)"; $det = if ($e.Ok) { (T "Démarrage : {0}. LuKZyR n'y touche jamais (seul le partage entre PC peut être coupé).") -f (Texte-StartType $e.Demarrage) } else { T "Désactivé par un autre outil : Windows Update et le Store peuvent échouer. Réactive-le avec l'outil qui l'a coupé." } }
+      default    {
+        $tit = T "Antivirus"
+        $det = if ("$($e.Statut)" -eq "Running") { T "Microsoft Defender actif. LuKZyR n'y touche jamais." } elseif ($e.Antivirus) { (T "{0} actif : Defender se met en veille quand un autre antivirus est installé, c'est normal.") -f $e.Antivirus } else { T "Aucun antivirus actif trouvé : ouvre Sécurité Windows et réactive la protection en temps réel." }
+      }
+    }
+    Carte-Sante $pg $y $tit $det $(if ($e.Ok) { T "OK" } else { T "À vérifier" }) $(if ($e.Ok) { $cVert } else { $cOrange }) $(if ($e.Ok) { "check-circle" } else { "alert" }); $y += 70
+  }
+  $y += 4
+  Section $pg $y "TÂCHES PLANIFIÉES D'AUTRES ÉDITEURS"; $y += 28
+  [void](Lbl $pg "Décochée = rien ne change. Cochée = désactivée au prochain APPLIQUER (annulable). Les tâches de Microsoft, des navigateurs et des antivirus ne sont jamais proposées." 4 $y 900 36 (Police 11.5) $cGris $cFond); $y += 42
+  $taches = @($r.Taches | Where-Object { $_ })
+  foreach ($t in $taches) {
+    $quand = @(@($t.Quand) | ForEach-Object { if ($quandTaches[$_]) { T $quandTaches[$_] } }) -join ", "
+    $desc = ((T "Éditeur : {0}") -f $(if ($t.Editeur) { $t.Editeur } else { T "inconnu" })) + $(if ($quand) { " · " + (T "lancée") + " " + $quand } else { "" }) + $(if ($t.Exe) { " · " + [IO.Path]::GetFileName("$($t.Exe)") } else { "" })
+    [void](Ligne $pg $y $t.Nom $desc $false $null "tache:$($t.Plein)" -Badge "s"); $y += 84
+  }
+  if (-not $taches.Count) { [void](Lbl $pg "Aucune tâche planifiée active d'un autre éditeur." 4 $y 700 22 (Police 12) $cGris $cFond) }
+  $pages["reparer"].Panel.Recalc()
+  Log "Réparer : $resume ($($taches.Count) tâche(s) planifiée(s) d'autres éditeurs)."
+}
+$pRep = NouvellePage "reparer" "Réparer" "Réglages laissés par d'autres optimiseurs et tâches planifiées d'autres éditeurs. Coche, puis APPLIQUER." -Defile -Construire { Construire-Reparer }
 
 # ===================== PARAMÈTRES =====================
 $pT = NouvellePage "parametres" "Paramètres" "Apparence, langue et mises à jour de LuKZyR Optimisation." -Defile
@@ -3195,6 +3618,9 @@ function Maj-Alertes {
   # 1. Applis lourdes au démarrage (lu en arrière-plan)
   if (-not $script:alertesInit) { $script:alertesInit = $true; Regler-Alerte $alDem 0xE895 $cAccentClair (T "Lecture du démarrage...") "" $null; Regler-Alerte $alSante 0xE895 $cAccentClair (T "Lecture des disques...") "" $null }
   En-Fond "alertes-demarrage" $codeDemarrage (Vars-Demarrage $false) { param($r) Alerte-Demarrage $r }
+  # v5.14 : Réparer et Diagnostic lus en arrière-plan (score, rapport système ; pages remplies dès l'ouverture)
+  if (-not $script:reparRes) { try { Lancer-Reparer } catch {} }
+  if (-not $script:diagRes) { try { Lancer-Diagnostic } catch {} }
   Maj-AlerteOptim
   # 3. Mise à jour disponible, sinon santé des disques
   if ($etatMaj.Statut -in @("dispo", "telechargement", "telecharge")) {
@@ -3222,10 +3648,12 @@ function Maj-AlerteOptim {
 function Lire-Reg($chemin, $nom) { try { (Get-ItemProperty -LiteralPath $chemin -Name $nom -ErrorAction Stop).$nom } catch { $null } }
 $script:scoreDem = $null; $script:scoreDisques = $null; $script:scoreDetail = @()
 $testsScore = @(
-  @("Mode Jeu", { $v = Lire-Reg "HKCU:\Software\Microsoft\GameBar" "AutoGameModeEnabled"; ($null -eq $v) -or ($v -ne 0) }),
+  # v5.14 : valeur réellement présente exigée (absente = pas compté comme réglé)
+  @("Mode Jeu", { (Lire-Reg "HKCU:\Software\Microsoft\GameBar" "AutoGameModeEnabled") -eq 1 }),
   @("Captures de jeu en arrière-plan coupées", { (Lire-Reg "HKCU:\System\GameConfigStore" "GameDVR_Enabled") -eq 0 }),
   @("Planification GPU à accélération matérielle", { (Lire-Reg "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode") -eq 2 }),
-  @("Priorité aux jeux", { (Lire-Reg "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" "GPU Priority") -eq 8 }),
+  # v5.14 : « GPU Priority » n'est plus écrit (inutilisé selon Microsoft) : on vérifie SystemResponsiveness
+  @("Priorité aux jeux", { (Lire-Reg "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "SystemResponsiveness") -eq 10 }),
   @("Souris sans accélération", { "$(Lire-Reg 'HKCU:\Control Panel\Mouse' 'MouseSpeed')" -eq "0" }),
   @("Optimisations des jeux en fenêtre", { "$(Lire-Reg 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences' 'DirectXUserGlobalSettings')" -match 'SwapEffectUpgradeEnable=1' }),
   @("Télémétrie réduite", { $v = Lire-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry"; ($null -ne $v) -and ($v -le 1) }),
@@ -3247,6 +3675,9 @@ function Calculer-Score {
     $det += , @(($p -eq 10), ((T "Espace libre sur {0}") -f $env:SystemDrive) + " : $pl %", $p, 10)
   } catch {}
   if ($null -ne $script:scoreDisques) { $p = if ($script:scoreDisques) { 5 } else { 0 }; $pts += $p; $max += 5; $det += , @([bool]$script:scoreDisques, (T "Disques en bonne santé"), $p, 5) }
+  # v5.14 : réglages nuisibles d'autres optimiseurs (Système > Réparer) et diagnostic du matériel, une fois lus
+  if ($null -ne $script:scoreReparer) { $p = if ($script:scoreReparer -eq 0) { 5 } else { 0 }; $pts += $p; $max += 5; $det += , @(($p -eq 5), ((T "Aucun réglage nuisible d'un autre optimiseur") + " : $($script:scoreReparer)"), $p, 5) }
+  if ($null -ne $script:scoreDiag) { $p = if ($script:scoreDiag -eq 0) { 5 } else { 0 }; $pts += $p; $max += 5; $det += , @(($p -eq 5), ((T "Diagnostic du matériel sans alerte") + " : $($script:scoreDiag)"), $p, 5) }
   $ag = @($script:infosPilotes | Where-Object { $_.Age -ge 0 } | Select-Object -First 1)
   if ($ag.Count) { $p = if ($ag[0].Age -le 180) { 5 } else { 0 }; $pts += $p; $max += 5; $det += , @(($p -eq 5), ((T "Pilote graphique de moins de 6 mois") + " (" + ((T "{0} jours") -f $ag[0].Age) + ")"), $p, 5) }
   $score = if ($max -gt 0) { [int][math]::Round(100 * $pts / $max) } else { 0 }
@@ -3398,6 +3829,20 @@ function Construire-Plan($Seulement = $null) {
     foreach ($o in $opts) { [void]$liste.Add($o.Tag.Titre) }
     [void]$plan.Add((EtapeScript "Optimisation de Windows" "Optimisation-PC.ps1" $a))
   }
+  # v5.14 : Système > Réparer (réglages d'autres optimiseurs, tâches planifiées d'autres éditeurs). Le script retient
+  # lui-même chaque valeur d'origine avant de la changer (« Tout annuler »).
+  $rep = @($actifs | Where-Object { "$($_.Tag.Cle)" -like "repar:*" }); $tch = @($actifs | Where-Object { "$($_.Tag.Cle)" -like "tache:*" })
+  if ($rep.Count -or $tch.Count) {
+    $fRep = Join-Path $dossierJournal "a-reparer.json"
+    try {
+      if (-not (Test-Path -LiteralPath $dossierJournal)) { [void](New-Item -ItemType Directory -Path $dossierJournal -Force) }
+      $obj = [ordered]@{ Reparer = @($rep | ForEach-Object { $_.Tag.Cle.Substring(6) }); Taches = @($tch | ForEach-Object { $_.Tag.Cle.Substring(6) }) }
+      [IO.File]::WriteAllText($fRep, ($obj | ConvertTo-Json -Depth 3), (New-Object Text.UTF8Encoding $false))
+      foreach ($o in $rep) { [void]$liste.Add((T "Réparer") + " : " + (T $o.Tag.Titre)) }
+      foreach ($o in $tch) { [void]$liste.Add((T "Désactiver la tâche") + " : " + $o.Tag.Titre) }
+      [void]$plan.Add((EtapeScript "Réparation des réglages" "Reparer-Reglages.ps1" "-NonInteractif -Fichier `"$fRep`""))
+    } catch { Log "Réparer : liste non écrite ($($_.Exception.Message))." }
+  }
   # Sauvegarde des valeurs d'origine (pour « Tout annuler ») AVANT toute modification
   $aSauver = @($opts | ForEach-Object { $_.Tag.Cle })
   foreach ($k in "debloat", "telemetrie", "copilot") { if ($on[$k]) { $aSauver += $k } }
@@ -3451,7 +3896,9 @@ function Tick-Moteur {
     $nomEt = $script:plan[$script:idx].Nom
     if ($nomEt -eq "Point de restauration") {
       # v5.6 : sans point de restauration, on demande avant de toucher à quoi que ce soit
-      $script:pointOk = ($code -eq 0)
+      # v5.14 : code 2 = point récent (moins de 10 min) réutilisé, dit tel quel (pas « créé »)
+      $script:pointOk = ($code -eq 0 -or $code -eq 2); $script:pointReutilise = ($code -eq 2)
+      if ($code -eq 2) { $code = 0; Log "   Point de restauration récent réutilisé (aucun nouveau point créé)." }
       if (-not $script:pointOk) {
         $msgPR = (T "Le point de restauration n'a pas pu être créé (détail dans le Journal).") + "`n`n" + (T "Continuer quand même, SANS point de restauration ?") + "`n" + (T "Non = tout arrêter : rien n'a encore été modifié.")
         $repPR = if ($TestAuto -or $env:LK_TEST) { if ($env:LK_POINT -eq "non") { "No" } else { "Yes" } } else { "$(Boite $msgPR "YesNo" "Warning")" }
@@ -3497,13 +3944,16 @@ function Fin-Execution {
   # après « Tout annuler », le bouton redevient OPTIMISER (l'appli n'est plus « optimisée »)
   if ($script:estRestauration) { $orb.Text = (T "OPTIMISER"); $orb.Sub = (T "Redémarre le PC") }
   foreach ($pl in $pillules.Values) { $pl.Enabled = $true }
-  foreach ($sw in $toggles) { $sw.Enabled = $true }
+  # v5.14 : un réglage indisponible sur ce PC (Edge absent, hibernation sur batterie...) reste grisé
+  foreach ($sw in $toggles) { $sw.Enabled = -not $sw.Tag.Indispo }
   if ($script:arrete) { }
   elseif (-not $script:estRestauration) { Enregistrer-Pref "DerniereOptimisation" (Get-Date -Format "dd/MM HH:mm") } else { Enregistrer-Pref "DerniereOptimisation" "" }
   try { Maj-AlerteOptim } catch { Log "Alerte optimisation : $($_.Exception.Message)" }
   try { Maj-Alertes } catch {}
   # Après « Tout annuler » : relire Démarrage et Réseau au prochain affichage (état d'origine remis)
   if ($script:estRestauration) { foreach ($pn in "demarrage", "reseau") { $script:pages[$pn].Construite = $false }; if ($script:pageActive -in @("demarrage", "reseau")) { try { Afficher $script:pageActive -Forcer } catch {} } }
+  # v5.14 : Réparer et Diagnostic relus après chaque opération (ce qui a été réparé disparaît de la liste)
+  if (-not $script:arrete) { $script:reparRes = $null; $script:diagRes = $null; foreach ($pn in "reparer", "diagnostic") { $script:pages[$pn].Construite = $false }; if ($script:pageActive -in @("reparer", "diagnostic")) { try { Afficher $script:pageActive -Forcer } catch {} } }
   $hero.SetProg(100); try { $orb.SetProgress(1) } catch {}; $hD.Text = $texteHero; $tCacheProg.Start()
   $duree = [math]::Max(1, [math]::Round(((Get-Date) - $script:debut).TotalMinutes))
   Log ("Résumé : " + $script:resume.Count + " élément(s), $duree min, $($script:nbErreurs) erreur(s).")
@@ -3530,6 +3980,7 @@ function Afficher-Resume($duree) {
   $sousT = if ($script:arrete) { T "Le point de restauration n'a pas pu être créé : tu as choisi de tout arrêter." }
     elseif ($script:sansPoint) { ((T "{0} élément(s) installé(s) en {1} min.") -f $n, $duree) }
     elseif ($resto) { ((T "{0} valeur(s) d'origine remise(s) en {1} min.") -f $n, $duree) }
+    elseif ($script:pointOk -and $script:pointReutilise) { ((T "{0} réglage(s) appliqué(s) en {1} min · point de restauration récent réutilisé (créé il y a moins de 10 min).") -f $n, $duree) }
     elseif ($script:pointOk) { ((T "{0} réglage(s) appliqué(s) en {1} min · point de restauration créé.") -f $n, $duree) }
     else { ((T "{0} réglage(s) appliqué(s) en {1} min · SANS point de restauration.") -f $n, $duree) }
   if ($script:arrete) { $script:resume = @(); $n = 0 }
@@ -3594,7 +4045,7 @@ function Lancer-Plan($plan, [switch]$Ici, $Resume = $null, $Titre = "", [switch]
   $script:sansPoint = [bool]$SansPoint
   $script:enCours = $true; $script:plan = @($plan); $script:nbEtapes = $script:plan.Count; $script:idx = -1; $script:estRestauration = $false
   $script:resume = @($Resume | Where-Object { $_ }); $script:titreResume = $Titre; $script:nbErreurs = 0; $script:etapesErreur = @(); $script:debut = Get-Date
-  $script:pointOk = $false; $script:arrete = $false
+  $script:pointOk = $false; $script:pointReutilise = $false; $script:arrete = $false
   $tCacheProg.Stop(); $hero.SetProg(0); try { $orb.SetProgress(0) } catch {}
   foreach ($e in $script:plan) { if ("$($e.Args)" -match '-Restaurer') { $script:estRestauration = $true } }
   foreach ($sw in $toggles) { $sw.Enabled = $false }

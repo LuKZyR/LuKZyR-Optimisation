@@ -56,7 +56,8 @@ if (-not $NonInteractif) {
 if (-not $SansPointRestauration) {
   # v5.6 : même script que l'interface (fréquence sauvegardée puis remise, résultat vérifié)
   & (Join-Path $PSScriptRoot "Point-Restauration.ps1") -NonInteractif -Description "Avant debloat"
-  if ($LASTEXITCODE -ne 0) {
+  # v5.14 : code 2 = un point récent (moins de 10 min) existait déjà et est réutilisé (dit clairement par le script)
+  if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) {
     if ($NonInteractif) { Write-Host "Arrêt : pas de point de restauration, rien n'a été modifié." -ForegroundColor Red; exit 1 }
     if ((Read-Host "Continuer SANS point de restauration ? (o/n)") -ne "o") { Write-Host "Arrêt : rien n'a été modifié."; exit 1 }
   }
