@@ -1,4 +1,4 @@
-// HelixFlux Optimisation v0.1 bêta (version interne 5.3) - écran de chargement de l'appli (scripts\LkChargement.dll)
+// LuKZyR Optimisation v0.1 bêta (version interne 5.3) - écran de chargement de l'appli (scripts\LkChargement.dll)
 // v5.2 : l'écran était piloté par un minuteur PowerShell dans un 2e runspace ; si ce minuteur cessait
 // d'être servi, plus rien ne pouvait le fermer (écran figé « Prêt 65 % » au-dessus de l'appli).
 // v5.3 : écran 100 % C# sur son propre fil (aucun code PowerShell n'y tourne), état partagé en champs
@@ -6,7 +6,7 @@
 //   1. Finish() (fenêtre principale affichée)  -> la barre file à 100 %
 //      Ready()  (fenêtre principale entièrement opaque) -> fondu de l'écran (pas de bureau entre les deux)
 //   2. Close()  (fenêtre principale fermée, ou filet de sécurité 2 s après l'affichage) -> WM_CLOSE posté
-//   3. chien de garde interne : dès qu'une fenêtre visible « HelixFlux Optimisation » de CE processus existe
+//   3. chien de garde interne : dès qu'une fenêtre visible « LuKZyR Optimisation » de CE processus existe
 //      depuis 2 s -> Finish ; Finish + 2,5 s sans Ready -> fondu ; Finish + 4 s -> fermeture forcée
 //   4. plafond absolu (10 min) ; fil d'arrière-plan : il meurt avec le processus
 // Jamais TopMost.
@@ -21,8 +21,8 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("HelixFlux Optimisation - chargement")]
-[assembly: AssemblyProduct("HelixFlux Optimisation")]
+[assembly: AssemblyTitle("LuKZyR Optimisation - chargement")]
+[assembly: AssemblyProduct("LuKZyR Optimisation")]
 [assembly: AssemblyCompany("Lukzyr")]
 [assembly: AssemblyCopyright("Copyright © 2026 Lukzyr")]
 [assembly: AssemblyVersion("0.1.0.0")]
@@ -36,7 +36,7 @@ public static class LkChargement {
   internal static volatile bool Fin, Ferme, Pret;
   internal static volatile int FinTick;
   internal static volatile IntPtr Hwnd = IntPtr.Zero;
-  internal static bool Clair; internal static string Version = "", Racine = "", TitreFenetre = "HelixFlux Optimisation";
+  internal static bool Clair; internal static string Version = "", Racine = "", TitreFenetre = "LuKZyR Optimisation";
   static Thread fil; static readonly object verrou = new object();
   public static string DerniereErreur = "";
 
@@ -84,7 +84,7 @@ class LkEcranChargement : Form {
   [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
   [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int a, ref int v, int s);
 
-  readonly Color fond, bord, texte, gris, acc, piste, violet = Color.FromArgb(140, 82, 255), bleuLogo = Color.FromArgb(47, 155, 255);   // v5.5 : dégradé du logo HelixFlux
+  readonly Color fond, bord, texte, gris, acc, piste, violet = Color.FromArgb(140, 82, 255), bleuLogo = Color.FromArgb(18, 224, 255);   // v5.6 : dégradé du nouveau logo LuKZyR (cyan -> violet)
   readonly float s; Image logo; readonly Stopwatch sw = Stopwatch.StartNew();
   readonly System.Windows.Forms.Timer tm = new System.Windows.Forms.Timer();
   float aff, ang; double der, vuFenetre = -1, derVerif = -1, debutFondu = -1; bool fondu;
@@ -96,10 +96,10 @@ class LkEcranChargement : Form {
     if (LkChargement.Clair) { fond = C("#f6f6fa"); bord = C("#dcdce8"); texte = C("#1a1a24"); gris = C("#55556e"); acc = C("#7c4dff"); piste = C("#e3e3ec"); }
     else { fond = C("#0f0f15"); bord = C("#26263a"); texte = C("#f2f2f7"); gris = C("#8a8aa3"); acc = C("#a78bfa"); piste = C("#24242e"); }
     using (Graphics g = Graphics.FromHwnd(IntPtr.Zero)) s = Math.Max(1f, g.DpiX / 96f);
-    Text = "HelixFlux Optimisation - chargement"; FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.CenterScreen;
+    Text = "LuKZyR Optimisation - chargement"; FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.CenterScreen;
     ClientSize = new Size((int)(440 * s), (int)(270 * s)); BackColor = fond; ShowInTaskbar = true; TopMost = false;
     SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
-    try { string ico = Path.Combine(LkChargement.Racine, @"assets\helixflux.ico"); if (File.Exists(ico)) Icon = new Icon(ico); } catch { }
+    try { string ico = Path.Combine(LkChargement.Racine, @"assets\lukzyr.ico"); if (File.Exists(ico)) Icon = new Icon(ico); } catch { }
     try { string png = Path.Combine(LkChargement.Racine, @"assets\logo.png"); if (File.Exists(png)) { using (Image im = Image.FromFile(png)) logo = new Bitmap(im); } else if (Icon != null) logo = new Icon(Icon, 64, 64).ToBitmap(); } catch { }
     fT = new Font("Segoe UI", 24 * s, FontStyle.Bold, GraphicsUnit.Pixel); fS = new Font("Segoe UI", 12.5f * s, FontStyle.Regular, GraphicsUnit.Pixel);
     fE = new Font("Segoe UI", 12.5f * s, FontStyle.Regular, GraphicsUnit.Pixel); fP = new Font("Segoe UI", 12.5f * s, FontStyle.Bold, GraphicsUnit.Pixel);
@@ -179,8 +179,8 @@ class LkEcranChargement : Form {
       }
       if (logo != null) g.DrawImage(logo, cx - S(28), cy - S(28), S(56), S(56));
       TextFormatFlags fl = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
-      TextRenderer.DrawText(g, "HELIXFLUX", fT, new Rectangle(0, (int)S(112), W, (int)S(34)), acc, fl);
-      TextRenderer.DrawText(g, "Optimisation  ·  by Lukzyr", fS, new Rectangle(0, (int)S(144), W, (int)S(20)), gris, fl);
+      TextRenderer.DrawText(g, "LuKZyR", fT, new Rectangle(0, (int)S(112), W, (int)S(34)), acc, fl);
+      TextRenderer.DrawText(g, "Optimisation", fS, new Rectangle(0, (int)S(144), W, (int)S(20)), gris, fl);
       float xb = S(64), wb = W - 2 * xb, ye = S(188);
       using (Pen p = new Pen(Color.FromArgb(60, acc), S(2))) g.DrawEllipse(p, xb, ye, S(13), S(13));
       using (Pen p = new Pen(acc, S(2))) { p.StartCap = LineCap.Round; p.EndCap = LineCap.Round; g.DrawArc(p, xb, ye, S(13), S(13), ang, 100); }
