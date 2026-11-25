@@ -4,7 +4,8 @@ param(
   [switch]$VBS, [switch]$TRIM, [switch]$NettoyageTemp, [switch]$Hibernation, [switch]$AssistantStockage,
   [switch]$Transparence, [switch]$OptimDistribution, [switch]$Reparation,
   [switch]$JeuxFenetres, [switch]$VRR, [switch]$EdgeArrierePlan, [switch]$DelaiDemarrage, [switch]$AppsArrierePlan,
-  [switch]$WinSxS, [switch]$PlanEquilibre
+  [switch]$WinSxS, [switch]$PlanEquilibre,
+  [switch]$ModeAlimPerf, [switch]$GpuJeux, [switch]$OptimLecteurs
 )
 # Optimisation Windows 10/11 - générique (s'adapte au PC)
 # Sans paramètre : mode console interactif (tout, avec questions pour VBS et DISM/SFC).
@@ -29,6 +30,8 @@ $script:echecs = 0
 function Echec($t) { Write-Host " - ÉCHEC : $t" -ForegroundColor Red; $script:echecs++ }
 function reg { & reg.exe @args; if ($LASTEXITCODE -ne 0) { Echec "registre ($($args[1]) $($args[3]))" } }
 # PC portable = Windows le dit « mobile », ou une vraie batterie (pas un onduleur) dans un boîtier qui n'est pas un PC fixe
+# v5.14 : vraie batterie (pas un onduleur), même sur un PC qui ne se dit pas « portable »
+function A-Batterie { [bool]@(Get-CimInstance Win32_Battery | Where-Object { "$($_.Name) $($_.DeviceID)" -notmatch 'UPS|APC|Eaton|CyberPower|Back-?UPS|Onduleur|Smart-UPS' }).Count }
 function Est-Portable {
   $type = 0; try { $type = [int](Get-CimInstance Win32_ComputerSystem).PCSystemType } catch {}
   if ($type -eq 2) { return $true }
@@ -40,9 +43,9 @@ function Est-Portable {
 }
 
 $reglages = "Alimentation","ModeJeu","PlanifGPU","PrioriteJeux","Souris","VBS","TRIM","NettoyageTemp","Hibernation","AssistantStockage","Transparence","OptimDistribution","Reparation",
-  "JeuxFenetres","VRR","EdgeArrierePlan","DelaiDemarrage","AppsArrierePlan","WinSxS","PlanEquilibre"
+  "JeuxFenetres","VRR","EdgeArrierePlan","DelaiDemarrage","AppsArrierePlan","WinSxS","PlanEquilibre","ModeAlimPerf","GpuJeux","OptimLecteurs"
 # Réglages jamais appliqués « par défaut » en mode console (réservés à un choix explicite)
-$optionnels = "VBS","Reparation","AppsArrierePlan","WinSxS","PlanEquilibre"
+$optionnels = "VBS","Reparation","AppsArrierePlan","WinSxS","PlanEquilibre","ModeAlimPerf","GpuJeux"
 $tout = -not ($reglages | Where-Object { $PSBoundParameters.ContainsKey($_) })
 if ($tout -and -not $NonInteractif) {
   # Mode console : tout sauf VBS et réparation, qui sont demandés
@@ -55,7 +58,8 @@ if (-not $SansPointRestauration) {
   Etape "Point de restauration (pour pouvoir tout annuler)"
   # v5.6 : même script que l'interface (fréquence sauvegardée puis remise, résultat vérifié)
   & (Join-Path $PSScriptRoot "Point-Restauration.ps1") -NonInteractif -Description "Avant optimisation PC"
-  if ($LASTEXITCODE -ne 0) {
+  # v5.14 : code 2 = un point récent (moins de 10 min) existait déjà et est réutilisé (dit clairement par le script)
+  if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) {
     if ($NonInteractif) { Write-Host "Arrêt : pas de point de restauration, rien n'a été modifié." -ForegroundColor Red; exit 1 }
     if ((Read-Host "Continuer SANS point de restauration ? (o/n)") -ne "o") { Write-Host "Arrêt : rien n'a été modifié."; exit 1 }
   }
@@ -117,12 +121,12 @@ if ($PlanifGPU) {
 if ($PrioriteJeux) {
   Etape "Priorité aux jeux"
   $mm = "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
+  # v5.14 : « GPU Priority » et « SFIO Priority » ne sont plus écrits : la documentation Microsoft (MMCSS) les donne
+  # comme inutilisés. « Tout annuler » remet quand même ceux écrits par une ancienne version (toujours sauvegardés).
   reg add $mm /v SystemResponsiveness /t REG_DWORD /d 10 /f | Out-Null
-  reg add "$mm\Tasks\Games" /v "GPU Priority" /t REG_DWORD /d 8 /f | Out-Null
   reg add "$mm\Tasks\Games" /v Priority /t REG_DWORD /d 6 /f | Out-Null
   reg add "$mm\Tasks\Games" /v "Scheduling Category" /t REG_SZ /d High /f | Out-Null
-  reg add "$mm\Tasks\Games" /v "SFIO Priority" /t REG_SZ /d High /f | Out-Null
-  Ok "Priorité CPU/GPU donnée aux jeux."
+  Ok "Un peu moins de processeur réservé aux tâches de fond (effet faible, pas de gain d'images/s garanti)."
 }
 
 if ($Souris) {
@@ -183,7 +187,12 @@ if ($NettoyageTemp) {
   Ok "Fichiers temporaires supprimés ($gain Mo libérés ; les fichiers en cours d'utilisation sont ignorés)."
 }
 
-if ($Hibernation) {
+if ($Hibernation -and (A-Batterie)) {
+  # v5.14 : jamais sur un PC avec batterie (portable, tablette), même sans le profil « PC portable »
+  Etape "Hibernation"
+  Write-Host " - Batterie détectée : hibernation laissée active (elle protège ton travail quand la batterie est vide)." -ForegroundColor Yellow
+}
+elseif ($Hibernation) {
   Etape "Hibernation"
   $avait = Test-Path "$env:SystemDrive\hiberfil.sys"
   powercfg -h off 2>&1 | Out-Null
@@ -279,6 +288,68 @@ if ($WinSxS) {
   DISM /Online /Cleanup-Image /StartComponentCleanup 2>&1 | ForEach-Object { "$_" -replace "`0","" } | Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*\[[=\s\d\.%]*\]\s*$' } | ForEach-Object { Write-Host "   $_" }
   if ($LASTEXITCODE -eq 0) { Ok "Anciennes versions des composants supprimées (les mises à jour restent désinstallables)." }
   else { Echec "nettoyage des composants (DISM code $LASTEXITCODE)." }
+}
+
+# --- v5.14 ---
+if ($ModeAlimPerf) {
+  Etape "Mode d'alimentation « Meilleures performances » (Windows 11)"
+  try {
+    . (Join-Path $PSScriptRoot "Sauvegarde-Reglages.ps1") -NonInteractif:$NonInteractif
+    $plan = if ("$(powercfg /getactivescheme)" -match '([0-9a-f]{8}-[0-9a-f\-]{27})') { $matches[1] } else { "" }
+    if ($Alimentation -or $plan -eq "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" -or $plan -eq "e9a42b02-d5df-448d-aa00-03f14749eb61") {
+      Write-Host " - Ignoré : ce mode n'agit qu'avec le plan « Utilisation normale » (un plan Performances élevées est actif)." -ForegroundColor Yellow
+    } else {
+      $avant = Mode-Alim
+      if ($avant -eq $script:ModesAlim.perf) { Ok "Déjà en « Meilleures performances » (rien à changer)." }
+      else { [void](Mode-Alim $script:ModesAlim.perf); if ((Mode-Alim) -eq $script:ModesAlim.perf) { Ok "Mode « Meilleures performances » activé sur secteur (gain faible ; la batterie garde son propre mode)." } else { Echec "mode d'alimentation non changé." } }
+    }
+  } catch {
+    $ex = $_.Exception; $types = ""; while ($ex) { $types += " " + $ex.GetType().Name; $ex = $ex.InnerException }
+    if ($types -match 'EntryPointNotFound|DllNotFound') { Write-Host " - Non disponible sur cette version de Windows (Windows 11 seulement) : rien n'a été changé." -ForegroundColor Yellow }
+    else { Echec "mode d'alimentation : $($_.Exception.Message)" }
+  }
+}
+
+if ($GpuJeux) {
+  Etape "Carte graphique puissante pour les jeux"
+  # Même réglage que Paramètres > Affichage > Graphiques > « Hautes performances », jeu par jeu. Une préférence déjà
+  # choisie (par toi ou par Windows) n'est JAMAIS remplacée. Valeurs d'origine sauvegardées avant (« Tout annuler »).
+  . (Join-Path $PSScriptRoot "Sauvegarde-Reglages.ps1") -NonInteractif:$NonInteractif
+  $gpuPci = @(Get-CimInstance Win32_VideoController | Where-Object { "$($_.PNPDeviceID)" -like 'PCI\*' })
+  if ($gpuPci.Count -lt 2) { Write-Host " - Une seule carte graphique : rien à régler." -ForegroundColor Yellow }
+  else {
+    $k = "HKCU:\Software\Microsoft\DirectX\UserGpuPreferences"
+    if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null }
+    $exist = @((Get-Item -Path $k).GetValueNames())
+    $n = 0; $deja = 0
+    foreach ($exe in @(Lister-ExeJeux)) {
+      if ($exist -contains $exe) { $deja++; continue }
+      try { Set-ItemProperty -Path $k -Name $exe -Value "GpuPreference=2;" -Type String -ErrorAction Stop; $n++ } catch { Echec "préférence graphique de $exe" }
+    }
+    if ($n -or $deja) { Ok "$n jeu(x) réglé(s) sur la carte graphique puissante$(if ($deja) { ", $deja déjà réglé(s) (laissés tels quels)" })." }
+    else { Write-Host " - Aucun jeu Steam ou Epic trouvé : rien à régler." }
+  }
+}
+
+if ($OptimLecteurs) {
+  Etape "Optimiser les lecteurs"
+  # Tâche Windows hebdomadaire (TRIM des SSD, défragmentation des disques durs) : réactivée si un autre outil l'a coupée
+  $t = Get-ScheduledTask -TaskPath "\Microsoft\Windows\Defrag\" -TaskName "ScheduledDefrag" -ErrorAction SilentlyContinue
+  if (-not $t) { Write-Host " - Tâche « Optimiser les lecteurs » introuvable sur ce Windows." -ForegroundColor Yellow }
+  elseif ("$($t.State)" -eq "Disabled") {
+    try { [void](Enable-ScheduledTask -InputObject $t -ErrorAction Stop); Ok "Optimisation hebdomadaire des lecteurs réactivée (elle avait été coupée)." } catch { Echec "tâche « Optimiser les lecteurs » non réactivée." }
+  } else { Ok "Optimisation hebdomadaire des lecteurs déjà active." }
+  # Retrim tout de suite des SSD (sans effet sur les données ; les disques durs sont laissés à la tâche hebdomadaire)
+  if (-not $TRIM) {
+    $r = 0
+    Get-Volume | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.FileSystem -match 'NTFS|ReFS' } | ForEach-Object {
+      $lettre = $_.DriveLetter
+      $disk = $_ | Get-Partition | Get-Disk | Get-PhysicalDisk
+      if ("$($disk.MediaType)" -eq 'HDD') { return }
+      try { Optimize-Volume -DriveLetter $lettre -ReTrim -ErrorAction Stop; Ok "Retrim lancé sur $($lettre):"; $r++ } catch {}
+    }
+    if (-not $r) { Write-Host " - Aucun SSD à retrimer." }
+  } else { Write-Host " - Retrim déjà lancé par « TRIM des SSD »." }
 }
 
 if ($Reparation) {

@@ -28,6 +28,10 @@ $script:CatalogueReglages = @{
   "optim:AppsArrierePlan" = @{ Registre = @("HKLM\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy|LetAppsRunInBackground") }
   "optim:Hibernation" = @{ Special = @("hibernation") }
   "optim:TRIM" = @{ Special = @("trim") }
+  # v5.14 : mode d'alimentation Windows 11, carte graphique par jeu, tâche « Optimiser les lecteurs »
+  "optim:ModeAlimPerf" = @{ Special = @("modealim") }
+  "optim:GpuJeux" = @{ Dynamique = "gpujeux" }
+  "optim:OptimLecteurs" = @{ Special = @("tachedefrag") }
   "debloat" = @{ Registre = @(
       "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|SilentInstalledAppsEnabled", "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|SystemPaneSuggestionsEnabled",
       "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|SubscribedContent-338388Enabled", "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager|SubscribedContent-338389Enabled",
@@ -123,9 +127,92 @@ function Lire-Special($nom) {
       if ($pw -and @($pw.PSObject.Properties.Name) -contains "HibernateEnabled") { return [int]([bool]$pw.HibernateEnabled) }
       return [int](Test-Path -LiteralPath "$env:SystemDrive\hiberfil.sys")
     }
-    "trim"         { if ("$(fsutil behavior query DisableDeleteNotify)" -match 'NTFS DisableDeleteNotify\s*=\s*(\d)') { return [int]$matches[1] } }
+    "trim"         {
+      # v5.14 : Windows 10 ancien affiche « DisableDeleteNotify = 0 » (sans « NTFS ») : 1re ligne qui donne 0 ou 1
+      foreach ($ligne in @(fsutil behavior query DisableDeleteNotify 2>$null)) { if ("$ligne" -match 'DisableDeleteNotify\s*[=:]\s*([01])\b') { return [int]$matches[1] } }
+    }
+    "modealim"     { try { return (Mode-Alim) } catch { return $null } }
+    "tachedefrag"  { $t = Get-ScheduledTask -TaskPath "\Microsoft\Windows\Defrag\" -TaskName "ScheduledDefrag" -ErrorAction SilentlyContinue; if ($t) { return $(if ("$($t.State)" -eq "Disabled") { "Disabled" } else { "Ready" }) } }
+    "mmagent"      { try { return [int][bool](Get-MMAgent -ErrorAction Stop).MemoryCompression } catch { return $null } }
   }
   return $null
+}
+# v5.14 : mode d'alimentation de Windows 11 (Meilleures performances / Équilibré / Meilleure efficacité énergétique),
+# sur secteur. API officielle powrprof.dll ; absente sur Windows 10 (erreur => « non disponible »).
+$script:ModesAlim = @{ perf = "ded574b5-45a0-4f42-8737-46345c09c238"; equilibre = "00000000-0000-0000-0000-000000000000"; efficacite = "961cc777-2547-4f9d-8174-7d86181b8a7a" }
+function Mode-Alim($nouveau = $null) {
+  if (-not ("LkPw.ModeAlim" -as [type])) {
+    Add-Type -Namespace LkPw -Name ModeAlim -ErrorAction Stop -MemberDefinition @'
+[DllImport("powrprof.dll")] public static extern uint PowerGetUserConfiguredACPowerMode(out Guid mode);
+[DllImport("powrprof.dll")] public static extern uint PowerSetUserConfiguredACPowerMode(ref Guid mode);
+'@
+  }
+  if ($null -ne $nouveau) {
+    $g = [guid]"$nouveau"; $r = [LkPw.ModeAlim]::PowerSetUserConfiguredACPowerMode([ref]$g)
+    if ($r -ne 0) { throw "PowerSetUserConfiguredACPowerMode : code $r" }
+    return "$g"
+  }
+  $g = [guid]::Empty; $r = [LkPw.ModeAlim]::PowerGetUserConfiguredACPowerMode([ref]$g)
+  if ($r -ne 0) { throw "PowerGetUserConfiguredACPowerMode : code $r" }
+  return "$g"
+}
+# v5.14 : retenir l'état d'origine d'un élément « spécial » ou d'un service (réparations, tâches planifiées)
+function Retenir-Special($nom, $valeur, $d = $null) {
+  $ecrire = -not $d; if (-not $d) { $d = Lire-Sauvegarde }
+  $n = 0; if ($null -ne $valeur -and -not $d.Speciaux.Contains($nom)) { $d.Speciaux[$nom] = $valeur; $n = 1 }
+  if ($ecrire) { Ecrire-Sauvegarde $d }
+  return $n
+}
+function Retenir-Service($nom, $d = $null) {
+  $ecrire = -not $d; if (-not $d) { $d = Lire-Sauvegarde }
+  $n = 0; if (-not $d.Services.Contains($nom)) { $sv = Get-Service $nom -ErrorAction SilentlyContinue; if ($sv) { $d.Services[$nom] = "$($sv.StartType)"; $n = 1 } }
+  if ($ecrire) { Ecrire-Sauvegarde $d }
+  return $n
+}
+# v5.14 : jeux installés (Steam : toutes les bibliothèques ; Epic : manifestes). Lecture seule.
+function Lister-BibliothequesJeux {
+  $jeux = New-Object System.Collections.ArrayList
+  $steam = $null
+  foreach ($c in "HKCU:\Software\Valve\Steam", "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam", "HKLM:\SOFTWARE\Valve\Steam") {
+    $p = Get-ItemProperty $c -ErrorAction SilentlyContinue
+    foreach ($n in "SteamPath", "InstallPath") { if (-not $steam -and $p.$n -and (Test-Path -LiteralPath ("$($p.$n)" -replace '/', '\'))) { $steam = ("$($p.$n)" -replace '/', '\') } }
+  }
+  $libs = @()
+  if ($steam) {
+    $libs += $steam
+    $vdf = Join-Path $steam "steamapps\libraryfolders.vdf"
+    if (Test-Path -LiteralPath $vdf) { foreach ($m in [regex]::Matches("$(Get-Content -LiteralPath $vdf -Raw -ErrorAction SilentlyContinue)", '"path"\s+"([^"]+)"')) { $libs += ($m.Groups[1].Value -replace '\\\\', '\') } }
+  }
+  foreach ($l in @($libs | Where-Object { $_ } | Select-Object -Unique)) {
+    $com = Join-Path $l "steamapps\common"
+    if (Test-Path -LiteralPath $com) { foreach ($dd in @(Get-ChildItem -LiteralPath $com -Directory -ErrorAction SilentlyContinue)) { [void]$jeux.Add([pscustomobject]@{ Nom = $dd.Name; Dossier = $dd.FullName; Source = "Steam"; Exe = $null }) } }
+  }
+  $man = Join-Path $env:ProgramData "Epic\EpicGamesLauncher\Data\Manifests"
+  if (Test-Path -LiteralPath $man) {
+    foreach ($f in @(Get-ChildItem -LiteralPath $man -Filter *.item -ErrorAction SilentlyContinue)) {
+      try {
+        $j = Get-Content -LiteralPath $f.FullName -Raw -ErrorAction Stop | ConvertFrom-Json
+        if ($j.InstallLocation -and (Test-Path -LiteralPath $j.InstallLocation)) {
+          $exe = if ($j.LaunchExecutable) { Join-Path $j.InstallLocation $j.LaunchExecutable } else { $null }
+          [void]$jeux.Add([pscustomobject]@{ Nom = "$($j.DisplayName)"; Dossier = "$($j.InstallLocation)"; Source = "Epic"; Exe = $exe })
+        }
+      } catch {}
+    }
+  }
+  return $jeux
+}
+# Exécutables des jeux (pour « carte graphique puissante par jeu ») : l'exe du manifeste Epic, sinon les plus gros .exe
+# du dossier du jeu (3 niveaux maxi), sans installeurs / anti-triche / outils. 400 au plus.
+function Lister-ExeJeux {
+  $exclus = '(?i)unins|setup|install|redist|dxsetup|directx|crash|report|anticheat|easyanticheat|battleye|^be(service|launcher)|^eac|prereq|dotnet|physx|cefprocess|webhelper|helper|updater|update|python|server|editor|cleanup|activation|register|benchmark|vc_?redist'
+  $l = New-Object System.Collections.ArrayList
+  foreach ($j in @(Lister-BibliothequesJeux)) {
+    if ($l.Count -ge 400) { break }
+    if ($j.Exe) { if ((Test-Path -LiteralPath $j.Exe) -and -not $l.Contains($j.Exe)) { [void]$l.Add($j.Exe) }; continue }
+    $exes = @(Get-ChildItem -LiteralPath $j.Dossier -Filter *.exe -Recurse -Depth 3 -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 2MB -and $_.Name -notmatch $exclus } | Sort-Object Length -Descending | Select-Object -First 2)
+    foreach ($e in $exes) { if (-not $l.Contains($e.FullName)) { [void]$l.Add($e.FullName) } }
+  }
+  return @($l)
 }
 # Sauvegarde les originaux des éléments demandés (clés du catalogue)
 function Sauvegarder-Elements([string[]]$elements) {
@@ -133,20 +220,32 @@ function Sauvegarder-Elements([string[]]$elements) {
   foreach ($e in @($elements + "restauration")) {
     $c = $script:CatalogueReglages[$e]; if (-not $c) { continue }
     if ($c.Registre) { $n += Retenir-Registre $c.Registre $d }
+    if ($c.Dynamique -eq "gpujeux") { $ids = @(Lister-ExeJeux | ForEach-Object { "HKCU\Software\Microsoft\DirectX\UserGpuPreferences|$_" }); if ($ids.Count) { $n += Retenir-Registre $ids $d } }
     foreach ($s in @($c.Services)) { if ($s -and -not $d.Services.Contains($s)) { $sv = Get-Service $s; if ($sv) { $d.Services[$s] = "$($sv.StartType)"; $n++ } } }
     foreach ($sp in @($c.Speciaux + $c.Special)) { if ($sp -and -not $d.Speciaux.Contains($sp)) { $v = Lire-Special $sp; if ($null -ne $v) { $d.Speciaux[$sp] = $v; $n++ } } }
   }
   Ecrire-Sauvegarde $d
   return $n
 }
+# v5.14 : DNS réglés À LA MAIN d'une carte (vide = automatique / DHCP). La clé du registre est « {guid} » avec
+# accolades : avant, une lecture sans accolades échouait et « Tout annuler » remettait le DNS en automatique.
+function Dns-Manuel($guid, $famille = "ipv4") {
+  $g = "$guid".Trim().Trim('{', '}'); if (-not $g) { return "" }
+  $pile = if ($famille -eq "ipv6") { "Tcpip6" } else { "Tcpip" }
+  foreach ($n in @("{$g}", $g)) {
+    $k = Ouvrir-Cle "HKLM\SYSTEM\CurrentControlSet\Services\$pile\Parameters\Interfaces\$n" $false $false
+    if ($k) { try { return (("$($k.GetValue('NameServer', ''))" -replace '[,;\s]+', ',').Trim(',')) } finally { $k.Close() } }
+  }
+  return ""
+}
 # DNS : retient les serveurs configurés à la main (vide = automatique/DHCP) de chaque carte
 function Retenir-Dns($cartes) {
   $d = Lire-Sauvegarde
   foreach ($a in $cartes) {
     $g = "$($a.InterfaceGuid)"; if ($d.Dns.Contains($g)) { continue }
-    $v4 = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\$g" -Name NameServer).NameServer
-    $v6 = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters\Interfaces\$g" -Name NameServer).NameServer
+    $v4 = Dns-Manuel $g "ipv4"; $v6 = Dns-Manuel $g "ipv6"
     $d.Dns[$g] = [ordered]@{ Nom = "$($a.Name)"; IPv4 = "$v4"; IPv6 = "$v6" }
+    Write-Host " - DNS d'origine de « $($a.Name) » : $(if ("$v4$v6") { "$v4 $v6".Trim() + ' (réglé à la main)' } else { 'automatique' })"
   }
   Ecrire-Sauvegarde $d
 }
@@ -172,7 +271,10 @@ function Resume-Sauvegarde {
   foreach ($k in $d.Services.Keys) { [void]$l.Add("Service $k : démarrage $($d.Services[$k])") }
   foreach ($k in $d.Speciaux.Keys) {
     $v = $d.Speciaux[$k]
-    [void]$l.Add($(switch ($k) { "alimentation" { "Plan d'alimentation d'origine ($v)" } "hibernation" { "Hibernation : $(if ($v) { 'activée' } else { 'désactivée' })" } "trim" { "TRIM (DisableDeleteNotify = $v)" } default { "$k = $v" } }))
+    [void]$l.Add($(switch -Wildcard ($k) { "alimentation" { "Plan d'alimentation d'origine ($v)" } "hibernation" { "Hibernation : $(if ($v) { 'activée' } else { 'désactivée' })" } "trim" { "TRIM (DisableDeleteNotify = $v)" }
+      "modealim" { "Mode d'alimentation Windows 11 ($v)" } "tachedefrag" { "Tâche « Optimiser les lecteurs » : $(if ($v -eq 'Disabled') { 'désactivée' } else { 'activée' })" }
+      "mmagent" { "Compression de la mémoire : $(if ([int]$v) { 'activée' } else { 'désactivée' })" } "tache:*" { "Tâche planifiée $($k.Substring(6)) : $(if ($v -eq 'Disabled') { 'désactivée' } else { 'activée' })" }
+      "bcd:*" { "Démarrage (bcdedit) $($k.Substring(4)) = $v" } default { "$k = $v" } }))
   }
   foreach ($k in $d.Dns.Keys) { $e = $d.Dns[$k]; [void]$l.Add("DNS de « $($e.Nom) » : $(if ("$($e.IPv4)$($e.IPv6)".Trim()) { "$($e.IPv4) $($e.IPv6)".Trim() } else { 'automatique (FAI)' })") }
   return $l
@@ -224,6 +326,27 @@ function Restaurer-Tout {
       "trim"         {
         fsutil behavior set DisableDeleteNotify ([int]$v) | Out-Null
         if ($LASTEXITCODE -eq 0) { $ok++ } else { $ko++; Write-Host " - Échec : TRIM non remis (fsutil code $LASTEXITCODE)." -ForegroundColor Red }
+      }
+      # v5.14
+      "modealim"     { try { [void](Mode-Alim $v); $ok++ } catch { $ko++; Write-Host " - Échec : mode d'alimentation non remis ($($_.Exception.Message))." -ForegroundColor Red } }
+      "tachedefrag"  {
+        try { if ("$v" -eq "Disabled") { [void](Disable-ScheduledTask -TaskPath "\Microsoft\Windows\Defrag\" -TaskName "ScheduledDefrag" -ErrorAction Stop) } else { [void](Enable-ScheduledTask -TaskPath "\Microsoft\Windows\Defrag\" -TaskName "ScheduledDefrag" -ErrorAction Stop) }; $ok++ }
+        catch { $ko++; Write-Host " - Échec : tâche « Optimiser les lecteurs » non remise." -ForegroundColor Red }
+      }
+      "mmagent"      { try { if ([int]$v) { Enable-MMAgent -MemoryCompression -ErrorAction Stop } else { Disable-MMAgent -MemoryCompression -ErrorAction Stop }; $ok++ } catch { $ko++; Write-Host " - Échec : compression de la mémoire non remise." -ForegroundColor Red } }
+      default {
+        if ($k -like "tache:*") {
+          $plein = $k.Substring(6); $i = $plein.LastIndexOf('\'); $chemin = $plein.Substring(0, $i + 1); $nomT = $plein.Substring($i + 1)
+          try { if ("$v" -eq "Disabled") { [void](Disable-ScheduledTask -TaskPath $chemin -TaskName $nomT -ErrorAction Stop) } else { [void](Enable-ScheduledTask -TaskPath $chemin -TaskName $nomT -ErrorAction Stop) }; $ok++ }
+          catch { if (-not (Get-ScheduledTask -TaskPath $chemin -TaskName $nomT -ErrorAction SilentlyContinue)) { $ok++ } else { $ko++; Write-Host " - Échec : tâche $plein non remise." -ForegroundColor Red } }
+        }
+        elseif ($k -like "bcd:*") {
+          $nomB = $k.Substring(4)
+          if ($nomB -notin @("useplatformclock", "useplatformtick", "disabledynamictick", "tscsyncpolicy")) { continue }
+          $vb = if ("$v" -match '^(?i)(yes|oui|on|true|ja|s[ií]|1)$') { "yes" } elseif ("$v" -match '^(?i)(no|non|off|false|nein|0)$') { "no" } else { "$v" }
+          & bcdedit.exe /set "{current}" $nomB $vb 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) { $ok++ } else { $ko++; Write-Host " - Échec : bcdedit $nomB non remis." -ForegroundColor Red }
+        }
       }
     }
   }
