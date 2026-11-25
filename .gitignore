@@ -8,6 +8,6 @@ scripts/_test.ps1
 _*.ps1
 *.log
 journal-*.txt
-HelixFlux-journal-*.txt
+LuKZyR-journal-*.txt
 Thumbs.db
 desktop.ini
