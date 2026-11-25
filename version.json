@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.13",
+  "build": "5.14",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.13) : la carte « Carte graphique » du Tableau de bord affiche le nom de la carte (au lieu de la mémoire vidéo), et les badges d'état (SÛR, NON RÉVERSIBLE, DÉFINITIF...) ne sont plus en gras.",
-  "sha256": "74f62bb33ee1a3c28ebf35efc8cff3d0f1604a0a397851902f5264bac9ba7e4b"
+  "notes": "v0.1 bêta (build 5.14) : nouvelles pages Système > Réparer (réglages nuisibles laissés par d'autres optimiseurs, tâches planifiées d'autres éditeurs) et Matériel > Diagnostic (dual channel, PCIe, chipset AMD, X3D, Windows pour Ryzen, jeux sur HDD, FreeSync / G-Sync), mode « Meilleures performances », carte graphique par jeu, Optimiser les lecteurs ; correctifs : DNS de « Tout annuler », hibernation sur portable, point de restauration, relance de la session de jeu.",
+  "sha256": "75e65a8372600de0d42a97505657de063300eb06140fc696221e06ab56be8d34"
 }
