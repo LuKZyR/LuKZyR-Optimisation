@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.6). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.8). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -19,20 +19,38 @@ DÉMARRAGE
      "Exécuter quand même". Le code source de l'exe est dans assets\source-lanceur\
      (il ne fait que lancer scripts\LuKZyR-Optimisation.ps1 en administrateur).
 
-L'INTERFACE (onglets en haut)
-  TABLEAU DE BORD
-    « Optimiser en 1 clic » : choisis un profil (Gaming max, Équilibré, PC portable ;
-    PC portable est conseillé automatiquement si une batterie est détectée : il garde
-    le plan d'alimentation équilibré et l'hibernation), puis clique sur le gros bouton
-    OPTIMISER : point de restauration + sauvegarde des réglages + application du profil
-    (le bouton pulse pendant l'exécution). Seuls les réglages du profil sont appliqués
-    (pas les applis ni les pilotes).
-    Jauges en direct (processeur, mémoire, disque C:).
-    Alertes réelles : applis lourdes au démarrage, date de la dernière optimisation
-    (+ lien « Tout annuler »), santé des disques / espace libre, nouvelle version.
-    Tuiles vers chaque section.
+L'INTERFACE (barre latérale à gauche)
+  BARRE LATÉRALE
+    Logo, recherche (Ctrl+F) dans tous les réglages, une entrée par section avec son
+    icône (Accueil, Performance, Session de jeu, Nettoyage, Applications, Système,
+    Matériel, Journal, Paramètres) et l'encadré « Tout est annulable » avec le bouton
+    « Tout annuler ». En haut de la page : le chemin (ex. Système › Réseau) et les
+    sous-pages de la section.
+  TABLEAU DE BORD (Accueil)
+    Bonjour / Bonsoir + l'état du PC, boutons « Rapport système » et « Optimiser
+    maintenant ».
+    Score d'optimisation (anneau sur 100) : calculé UNIQUEMENT avec ce qui est lu sur
+    ce PC, sans rien modifier : 10 réglages recommandés vérifiés dans le registre
+    (Mode Jeu, captures en arrière-plan coupées, planification GPU, priorité aux jeux,
+    souris sans accélération, jeux en fenêtre, télémétrie réduite, démarrage sans
+    délai, Edge sans préchargement, assistant de stockage) = 70 points ; applis lourdes
+    au démarrage (10), espace libre du disque système (10), santé des disques (5), âge
+    du pilote graphique (5). Une mesure pas encore lue n'est pas comptée. VBS n'est pas
+    compté (compromis sécurité / performance). « Détails » montre chaque point.
+    À côté : applis lourdes au démarrage, date de la dernière optimisation (+ lien
+    « Tout annuler »), santé des disques / espace libre, nouvelle version.
+    Profils en 1 clic : Gaming max, Équilibré, PC portable (conseillé automatiquement si
+    une batterie est détectée : il garde le plan d'alimentation équilibré et
+    l'hibernation). « Optimiser maintenant » : point de restauration + sauvegarde des
+    réglages + application du profil. Seuls les réglages du profil sont appliqués (pas
+    les applis ni les pilotes).
+    En direct : processeur, carte graphique (charge et mémoire vidéo), mémoire, disque
+    C:, avec une courbe des 60 dernières secondes. Mesuré seulement quand le Tableau de
+    bord est affiché (rien en arrière-plan sinon). Températures : affichées si
+    LibreHardwareMonitor est ouvert (sinon, rarement, par Windows).
+    Accès rapide : Session de jeu, Espace disque, Démarrage, Nettoyage.
 
-  PERFORMANCE   Jeu (Mode Jeu, priorité aux jeux, planification GPU, souris sans
+  PERFORMANCE   Réglages : jeu (Mode Jeu, priorité aux jeux, planification GPU, souris sans
                 accélération, optimisations des jeux en fenêtre, optimisations VRR),
                 processeur et alimentation (plan Utilisation normale OU Performances
                 élevées, hibernation), mémoire et sécurité (VBS), affichage
@@ -42,6 +60,13 @@ L'INTERFACE (onglets en haut)
                 Resizable BAR / Smart Access Memory, Radeon Anti-Lag, Ne pas déranger
                 en jeu, indexation de la recherche, effets d'animation de Windows,
                 chacune avec un bouton vers le bon réglage.
+                Session de jeu (nouveau) : ferme les applis cochées (OneDrive, Teams,
+                Widgets, Lien avec le téléphone, Adobe ; Spotify, Discord, launchers,
+                logiciels RGB si tu les coches) et peut passer en Performances élevées.
+                « Terminer la session » relance les applis (avec tes droits normaux)
+                et remet ton plan d'alimentation. Rien n'est désinstallé. Si le PC
+                redémarre en pleine session, l'appli propose de la terminer au
+                prochain lancement.
   NETTOYAGE     Windows plus léger (débloat, Copilot, OneDrive, Edge), confidentialité
                 (télémétrie, Optimisation de la distribution), fichiers (temporaires,
                 assistant de stockage, nettoyage des composants Windows (WinSxS),
@@ -51,21 +76,29 @@ L'INTERFACE (onglets en haut)
                 Navigateurs : Brave. Création et utilitaires : OBS Studio, 7-Zip, VLC.
                 Entretien : mise à jour des autres applis.
                 (EA app, Battle.net, GOG Galaxy, 7-Zip, VLC, OBS : décochés par défaut.)
-  SYSTÈME       Démarrage : applis lancées avec Windows (éditeur, impact estimé),
+  SYSTÈME       Démarrage : applis lancées avec Windows, triées par impact estimé
+                (badges IMPACT ÉLEVÉ / MOYEN / FAIBLE, résumé en haut),
                 activables / désactivables comme dans le Gestionnaire des tâches ;
                 les logiciels de sécurité ne sont jamais modifiables.
                 Réseau : DNS actuel ; Automatique (FAI), Cloudflare, Google ou Quad9
                 (IPv4 + IPv6) ; « Vider le cache DNS ».
+                Espace disque (nouveau, lecture seule) : taille des dossiers perso,
+                temporaires, corbeille, jeux Steam, hiberfil/pagefile, AppData.
+                Un clic ouvre le dossier ; rien n'est jamais supprimé.
                 Réparation et sécurité : TRIM des SSD, réparation DISM + SFC,
                 « Tout annuler », Restaurer le système, Gestionnaire de périphériques,
                 Redémarrer le PC.
-  MATÉRIEL      Mon PC (composants détectés), Pilotes officiels, Santé (disques,
+  MATÉRIEL      Mon PC (composants détectés + « Rapport système » : un fichier HTML
+                et texte sur le Bureau avec le matériel, les pilotes, Windows et les
+                réglages appliqués, pratique pour demander de l'aide ; rien n'est
+                envoyé), Pilotes officiels (avec la version et l'âge du pilote
+                graphique installé), Santé (disques,
                 espace libre, température, mémoire, alertes), Guide BIOS personnalisé
                 pour TA carte mère (exporter, page support, redémarrer dans le BIOS ;
                 rien n'est jamais modifié dans le BIOS ; texte du guide en français).
   JOURNAL       Ce qui se passe, en direct.
   PARAMÈTRES    (roue dentée) Thème clair, Langue FR / EN, Animations,
-                Animations réduites, Mise à jour de l'appli, À propos.
+                Animations réduites, Rendu lissé, Mise à jour de l'appli, À propos.
 
   Chaque option a un badge :
     SÛR             sans danger, remis par « Tout annuler »
@@ -102,37 +135,38 @@ TOUT ANNULER (bouton en bas de chaque section, Système > Réparation et sécuri
   installées, Edge désinstallé, fichiers temporaires effacés, réparation DISM/SFC.
   Pour ça : Système > Restaurer le système (point de restauration).
 
-MISE À JOUR DE L'APPLI (facultatif)
-  Au démarrage, l'appli vérifie en arrière-plan un petit fichier version.json
-  (jamais bloquant ; hors ligne, rien ne change). Sans adresse configurée, Paramètres
-  affiche simplement « Aucun serveur de mise à jour configuré ».
+MISE À JOUR DE L'APPLI
+  Au démarrage (et avec Paramètres > Mise à jour > « Vérifier »), l'appli vérifie
+  en arrière-plan, sans jamais bloquer l'interface (10 s maximum) :
+    1. https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/main/version.json
+    2. sinon les « Releases » GitHub de LuKZyR/LuKZyR-Optimisation.
+  Résultat affiché en clair : « Tu as la dernière version », « Nouvelle version
+  disponible », ou « Vérification impossible : <raison> » (pas d'Internet, pare-feu,
+  GitHub qui limite, fichier introuvable...). Hors ligne, l'appli marche normalement.
   Si une version plus récente existe, une alerte du Tableau de bord (et un bandeau
-  dans les sections) propose de télécharger le zip
-  sur le Bureau (le dossier s'ouvre ; l'appli ne se remplace jamais toute seule).
+  dans les sections) propose de télécharger le zip sur le Bureau (le dossier
+  s'ouvre ; l'appli ne se remplace jamais toute seule).
 
-  Pour l'activer, par exemple avec GitHub :
-    1. Crée un dépôt public (ex. LuKZyR-Optimisation) et publie le zip dans une
-       « Release » (ex. tag v0.2, fichier LuKZyR-Optimisation-v0.2.zip).
-    2. Ajoute à la racine du dépôt un fichier version.json :
+  Fichier version.json (à la racine du dépôt, branche main) :
          {
-           "version": "0.2",
-           "url": "https://github.com/TON-PSEUDO/LuKZyR-Optimisation/releases/download/v0.2/LuKZyR-Optimisation-v0.2.zip",
+           "version": "0.1 bêta",
+           "build": "5.8",
+           "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
-           "sha256": "empreinte SHA-256 du zip (facultatif, conseillé)"
+           "sha256": ""
          }
-       Les adresses doivent être en https (sinon elles sont refusées). Si "sha256" est
-       donné, le zip téléchargé est vérifié et supprimé s'il ne correspond pas.
-    3. Donne l'adresse « raw » de ce fichier à l'appli, au choix :
-       - dans C:\ProgramData\Lukzyr\config.json :
-           { "urlMiseAJour": "https://raw.githubusercontent.com/TON-PSEUDO/LuKZyR-Optimisation/main/version.json" }
-       - ou en haut de scripts\LuKZyR-Optimisation.ps1 : $UrlMiseAJourDefaut = "https://..."
-    À chaque nouvelle version : publie le zip, puis change "version" et "url".
-    Numéros acceptés : "0.1.1", "0.2", "0.2-beta"... (v0.1 bêta = 0.1.0). Une version
-    finale "0.1" est proposée aux utilisateurs de la 0.1 bêta ; "0.1-beta" ne l'est pas.
+  "version" est le numéro public, "build" le numéro interne : tant que la version
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (5.9 > 5.8).
+  Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
+  téléchargé est vérifié et supprimé s'il ne correspond pas.
+  Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
+  "0.1" est proposée aux utilisateurs de la 0.1 bêta.
+  Autre adresse possible : C:\ProgramData\Lukzyr\config.json :
+           { "urlMiseAJour": "https://.../version.json" }
 
 RÉGLAGES DE L'APPLI
   Animations, thème et langue sont mémorisés dans HKCU\Software\Lukzyr
-  (Animations, AnimationsReduites, Theme, Langue). Par défaut : animations
+  (Animations, AnimationsReduites, RenduLisse, SessionApps, Theme, Langue). Par défaut : animations
   activées, thème sombre, langue de Windows (français sinon anglais).
   Si les « Effets d'animation » sont coupés dans Windows (Accessibilité > Effets
   visuels), l'appli n'anime rien, quel que soit son propre réglage.
@@ -184,6 +218,38 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉS v0.1 bêta — nouvelle interface (version interne 5.8)
+  - Barre latérale à gauche (remplace les onglets du haut) : logo, recherche toujours
+    visible, une icône par section, encadré « Tout est annulable » + « Tout annuler ».
+    La fenêtre est un peu plus large (la barre ne prend pas de place aux pages).
+  - Tableau de bord refait : salutation et état du PC, score d'optimisation honnête
+    (lecture seule, détail point par point), carte des profils en 1 clic, 4 cartes
+    en direct avec courbe, accès rapide (Session de jeu, Espace disque, Démarrage,
+    Nettoyage). Les tuiles et le gros bandeau disparaissent.
+  - Toutes les pages et fonctions de la 5.7 sont conservées (fluidité, thèmes clair et
+    sombre, français / anglais, animations légères).
+
+NOUVEAUTÉS v0.1 bêta — interface et nouveautés (version interne 5.7)
+  Interface plus fluide :
+  - Changement de page sans saccade : la page est « photographiée » une fois et
+    l'image glisse (avant : des dizaines de fenêtres déplacées à chaque image).
+  - Cartes dessinées hors écran (plus de scintillement au survol ou au défilement).
+    Paramètres > « Rendu lissé » permet de le couper si une carte s'affiche mal.
+  - Défilement doux à la molette, barre de défilement attrapable à la souris.
+  - Compteur « N réglages » calculé une seule fois après une série de clics
+    (un profil cochait ~20 cases = 20 calculs avant).
+  - Polices et icônes gardées en mémoire, pages vidées proprement (mémoire rendue).
+  - Changement de thème en une seule image, sans animer chaque carte.
+  - Lectures lentes (GPU, température, mise à jour, espace disque) en arrière-plan.
+  Présentation : grille régulière (marges de 8 px), cartes avec bordure fine,
+  titres de section avec barre dégradée cyan → violet (couleurs du logo), boutons
+  principaux en dégradé, badges harmonisés.
+  Nouveautés : moniteur en direct (CPU, GPU, VRAM, RAM, températures), Session de
+  jeu, Espace disque, Rapport système, version et âge du pilote graphique, impact
+  des applis au démarrage. Toutes en lecture seule ou annulables.
+  Mise à jour : la vérification marche enfin (voir MISE À JOUR DE L'APPLI) :
+  l'adresse était vide, donc rien n'était jamais vérifié.
 
 NOUVEAUTÉS v0.1 bêta — correctifs (version interne 5.6)
   - Nouveau nom : LuKZyR Optimisation (exe « LuKZyR Optimisation.exe ») et nouveau

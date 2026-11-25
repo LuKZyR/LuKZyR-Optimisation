@@ -1,15 +1,18 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.6)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.8)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.6
-$VersionInterne = "5.6"
+$VersionBeta = $true         # v0.1 bêta = version interne 5.8
+$VersionInterne = "5.8"
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
-$UrlMiseAJourDefaut = ""
+# v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
+$UrlMiseAJourDefaut = "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/main/version.json"
+# 2e source si version.json est absent ou illisible : les releases GitHub du dépôt (pré-versions comprises)
+$UrlReleasesDefaut  = "https://api.github.com/repos/LuKZyR/LuKZyR-Optimisation/releases?per_page=5"
 # v5.6 : un plantage au démarrage n'est plus invisible : journal ProgramData\Lukzyr\plantage-demarrage.txt + message
 $script:fichierPlantage = Join-Path $env:ProgramData "Lukzyr\plantage-demarrage.txt"
 function Noter-Plantage($texte) {
@@ -254,12 +257,14 @@ public static class LkAnim {
 
 // Petite barre violette arrondie qui marque la page active dans la barre latérale
 public class LkIndicator : Control {
-  public Color Fill = Color.FromArgb(167, 139, 250);
+  public Color Fill = Color.FromArgb(167, 139, 250); public Color Fill2 = Color.Empty;
   public LkIndicator() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
   protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(Parent != null ? Parent.BackColor : BackColor); }
   protected override void OnPaint(PaintEventArgs e) {
     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-    using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 1, Height - 1), (Math.Min(Width, Height) - 1) / 2f)) using (SolidBrush b = new SolidBrush(Fill)) e.Graphics.FillPath(b, p);
+    if (Width < 2 || Height < 1) return;
+    using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 1, Height - 1), (Math.Min(Width, Height) - 1) / 2f))
+    using (Brush b = Fill2.IsEmpty ? (Brush)new SolidBrush(Fill) : new LinearGradientBrush(new RectangleF(-1, 0, Width + 2, Height), Fill2, Fill, 0f)) e.Graphics.FillPath(b, p);
   }
 }
 
@@ -272,16 +277,33 @@ public class LkPanel : Panel {
 public class LkCard : Panel {
   public Color Fill = Color.FromArgb(23, 23, 31); public int Radius = 12; bool hover; public Color HoverFill = Color.Empty;
   Color shown = Color.Empty; int tok; float hp; public Color Glow = Color.FromArgb(167, 139, 250);
+  // v5.7 : bordure fine (définit la carte sans l'alourdir) ; au survol elle glisse vers HoverBorder
+  public Color Border = Color.Empty, HoverBorder = Color.Empty;
+  public static Color BordDefaut = Color.Empty, BordSurvolDefaut = Color.Empty; public bool BordAuto = true;   // bordure du thème (changée en un coup)
+  // v5.7 : rendu « composé » (WS_EX_COMPOSITED) : la carte et ses textes sont peints ensemble, d'un seul bloc,
+  // plus de texte qui « clignote » au survol ou pendant un défilement. Coupé automatiquement si la carte
+  // contient une zone de texte (curseur clignotant) ou si l'option Paramètres > Rendu lissé est désactivée.
+  public static bool Compose = true; public static bool Instant = false;
+  public bool Composited = true;
   public LkCard() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
+  bool DansCompose() { for (Control p = Parent; p != null; p = p.Parent) { LkCard k = p as LkCard; if (k != null && k.Composited && Compose) return true; if (p is LkHero && Compose) return true; } return false; }
+  protected override CreateParams CreateParams { get { CreateParams cp = base.CreateParams; if (Compose && Composited && !DansCompose()) cp.ExStyle |= 0x02000000; return cp; } }
+  protected override void OnControlAdded(ControlEventArgs e) {
+    base.OnControlAdded(e);
+    if (Composited && (e.Control is TextBoxBase || e.Control is WebBrowserBase)) { Composited = false; if (IsHandleCreated) UpdateStyles(); }
+  }
   Color Target { get { return hover && !HoverFill.IsEmpty ? HoverFill : Fill; } }
   public Color CurrentFill { get { return shown.IsEmpty ? Target : shown; } }
-  public static Color BackOf(Control c) { if (c.Parent == null) return c.BackColor; LkCard k = c.Parent as LkCard; return k != null ? k.CurrentFill : c.Parent.BackColor; }
+  public static Color BackOf(Control c) {
+    if (c.Parent == null) return c.BackColor; LkCard k = c.Parent as LkCard; if (k != null) return k.CurrentFill;
+    LkHero h = c.Parent as LkHero; if (h != null && !h.Fill.IsEmpty) return h.Fill;
+    return c.Parent.BackColor; }
   public void SetHover(bool h) { if (HoverFill.IsEmpty || hover == h) return; Color from = CurrentFill; hover = h; Retarget(from); }
   public void SetFill(Color c) { Color from = CurrentFill; Fill = c; Retarget(from); }
   void Retarget(Color from) {
     Color to = Target; int my = ++tok;
     float h0 = hp, h1 = hover ? 1f : 0f;
-    if (!IsHandleCreated || !Visible) { shown = to; hp = h1; Sync(); return; }
+    if (Instant || !IsHandleCreated || !Visible) { shown = to; hp = h1; Sync(); return; }
     LkAnim.Tween(160, p => { if (my != tok) return; shown = LkAnim.Mix(from, to, p); hp = h0 + (h1 - h0) * p; Sync(); }, null);
   }
   void Sync() { Color c0 = CurrentFill; foreach (Control c in Controls) { if (c is Label) c.BackColor = c0; else c.Invalidate(); } Invalidate(); }
@@ -290,6 +312,13 @@ public class LkCard : Panel {
     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 0.5f, Height - 0.5f), Radius))
     using (SolidBrush b = new SolidBrush(CurrentFill)) e.Graphics.FillPath(b, p);
+    Color b0 = !Border.IsEmpty ? Border : (BordAuto ? BordDefaut : Color.Empty);
+    Color b1 = !HoverBorder.IsEmpty ? HoverBorder : (BordAuto && !HoverFill.IsEmpty ? BordSurvolDefaut : Color.Empty);
+    if (!b0.IsEmpty) {
+      Color bc = b1.IsEmpty ? b0 : LkAnim.Mix(b0, b1, hp);
+      using (GraphicsPath p = LkNative.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Math.Max(1, Radius - 0.5f)))
+      using (Pen pn = new Pen(bc, 1f)) e.Graphics.DrawPath(pn, p);
+    }
     base.OnPaint(e);
   }
 }
@@ -367,6 +396,7 @@ public class LkBar : Control {
 // Bouton arrondi
 public class LkButton : Control {
   public Color Fill = Color.FromArgb(140, 82, 255), HoverFill = Color.FromArgb(124, 66, 240), DisabledFill = Color.FromArgb(60, 50, 90); public int Radius = 10;
+  public Color Fill2 = Color.Empty;   // v5.7 : si défini, dégradé Fill2 (gauche) -> Fill (droite)
   public string Icon = null;
   float h; int tok; bool pressed; bool busy; float pulse; int dots;
   public LkButton() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); Cursor = Cursors.Hand; ForeColor = Color.White; }
@@ -404,7 +434,12 @@ public class LkButton : Control {
     } else c = !Enabled ? DisabledFill : LkAnim.Mix(Fill, HoverFill, h);
     RectangleF rc = new RectangleF(0, 0, Width - 1, Height - 1);
     if (pressed) { float d = Math.Max(1f, Height * 0.04f); rc.Inflate(-d, -d); c = LkAnim.Mix(c, Color.Black, 0.12f); }
-    using (GraphicsPath p = LkNative.Round(rc, Radius)) using (SolidBrush b = new SolidBrush(c)) g.FillPath(b, p);
+    using (GraphicsPath p = LkNative.Round(rc, Radius)) {
+      if (!Fill2.IsEmpty && Enabled && rc.Width > 2) {
+        Color c2 = LkAnim.Mix(Fill2, Color.Black, h * 0.12f + (pressed ? 0.12f : 0f));
+        using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(rc.X - 1, rc.Y, rc.Width + 2, rc.Height), c2, c, 0f)) g.FillPath(b, p);
+      } else using (SolidBrush b = new SolidBrush(c)) g.FillPath(b, p);
+    }
     Color fc = (Enabled || busy) ? ForeColor : Color.FromArgb(190, 190, 210);
     if (Icon != null && !busy) {
       TextFormatFlags tf = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
@@ -418,7 +453,9 @@ public class LkButton : Control {
 
 // Zone défilante sans barre Windows : molette + fine barre violette dessinée
 public class LkScroll : Panel, IMessageFilter {
-  public Panel Content = new Panel(); int off; public int Bar = 8; public Color Thumb = Color.FromArgb(60, 60, 80);
+  public Panel Content = new LkPanel(); int off; public int Bar = 8; public Color Thumb = Color.FromArgb(60, 60, 80);
+  // v5.7 : molette = défilement doux (le contenu glisse vers sa cible), pas de saut de 60 px
+  public int Step = 60; int target; bool glisse; bool drag; int dragY0, dragOff0;
   public LkScroll() {
     SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
     Controls.Add(Content); Application.AddMessageFilter(this);
@@ -427,12 +464,48 @@ public class LkScroll : Panel, IMessageFilter {
     int h = 0; foreach (Control c in Content.Controls) h = Math.Max(h, c.Bottom);
     Content.BackColor = BackColor; Content.Width = Width - Bar - 4; Content.Height = Math.Max(h + 4, Height); ScrollTo(off);
   }
-  public void ScrollTo(int y) { off = Math.Max(0, Math.Min(y, Content.Height - Height)); Content.Top = -off; Invalidate(); }
+  int Borne(int y) { return Math.Max(0, Math.Min(y, Content.Height - Height)); }
+  public int Offset { get { return off; } }
+  void Barre() { Invalidate(new Rectangle(Math.Max(0, Width - Bar - 2), 0, Bar + 2, Height)); }
+  public void ScrollTo(int y) { off = target = Borne(y); if (Content.Top != -off) Content.Top = -off; Barre(); }
+  public void ScrollSmooth(int y) {
+    target = Borne(y);
+    if (!LkAnim.On || LkAnim.Reduit || !Visible) { ScrollTo(target); return; }
+    if (glisse) return; glisse = true;
+    Stopwatch sw = Stopwatch.StartNew(); long last = 0;
+    LkAnim.Add(() => {
+      if (IsDisposed || !Visible) { glisse = false; return false; }
+      long now = sw.ElapsedMilliseconds; double dt = Math.Max(1, now - last); last = now;
+      int d = target - off;
+      if (Math.Abs(d) <= 1) { off = target; Content.Top = -off; Barre(); glisse = false; return false; }
+      int pas = (int)Math.Round(d * (1.0 - Math.Exp(-dt / 55.0))); if (pas == 0) pas = Math.Sign(d);
+      off += pas; Content.Top = -off; Barre(); return true;
+    });
+  }
+  Rectangle Pouce() {
+    if (Content.Height <= Height) return Rectangle.Empty;
+    float th = Math.Max(30f, (float)Height * Height / Content.Height); float ty = (Height - th) * off / (float)(Content.Height - Height);
+    return new Rectangle(Width - Bar - 2, (int)ty, Bar + 2, (int)th);
+  }
+  protected override void OnMouseDown(MouseEventArgs e) {
+    base.OnMouseDown(e);
+    if (e.Button != MouseButtons.Left || Content.Height <= Height || e.X < Width - Bar - 4) return;
+    Rectangle p = Pouce();
+    if (!p.Contains(e.Location)) { ScrollSmooth(off + (e.Y < p.Top ? -Height : Height) * 9 / 10); return; }
+    drag = true; dragY0 = e.Y; dragOff0 = off; Capture = true;
+  }
+  protected override void OnMouseMove(MouseEventArgs e) {
+    base.OnMouseMove(e);
+    if (!drag) return;
+    Rectangle p = Pouce(); float course = Height - p.Height; if (course < 1) return;
+    ScrollTo(dragOff0 + (int)((e.Y - dragY0) * (Content.Height - Height) / course));
+  }
+  protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); drag = false; Capture = false; }
   public bool PreFilterMessage(ref Message m) {
     if (m.Msg != 0x020A || !Visible || Content.Height <= Height) return false;
     Control p = this; while (p != null) { if (!p.Visible) return false; p = p.Parent; }
     if (!RectangleToScreen(ClientRectangle).Contains(Cursor.Position)) return false;
-    int delta = (short)((long)m.WParam >> 16); ScrollTo(off - delta * 60 / 120); return true;
+    int delta = (short)((long)m.WParam >> 16); ScrollSmooth((glisse ? target : off) - delta * Step / 120); return true;
   }
   protected override void OnPaint(PaintEventArgs e) {
     e.Graphics.Clear(BackColor);
@@ -482,6 +555,9 @@ public static class LkIcons {
     {"settings", "g 12 12 9.6 7.4 8; c 12 12 3"},
     {"x", "l 18 6 6 18; l 6 6 18 18"},
     {"minus", "l 5 12 19 12"},
+    {"home", "p 3 11 12 3.5 21 11; p 5.5 9 5.5 20.5 10 20.5 10 14.5 14 14.5 14 20.5 18.5 20.5 18.5 9"},
+    {"list", "l 8.5 6 21 6; l 8.5 12 21 12; l 8.5 18 21 18; f 4 6 1.3; f 4 12 1.3; f 4 18 1.3"},
+    {"sliders", "l 3 7 13 7; l 19 7 21 7; c 16 7 2.6; l 3 17 5 17; l 11 17 21 17; c 8 17 2.6"},
     {"search", "c 11 11 7; l 21 21 16 16"},
     {"chevron", "p 9 18 15 12 9 6"},
     {"check", "p 20 6 9 17 4 12"},
@@ -510,7 +586,12 @@ public static class LkIcons {
     {"gauge", "a 12 14 9 150 240; l 12 14 16 9.5; f 12 14 1.4"},
     {"drive", "r 2 13 20 8 2; p 2 13 5.5 4.5 18.5 4.5 22 13; f 6.5 17 1.1; l 10 17 17 17"},
     {"memory", "r 2 6 20 12 1.8; l 6 10 6 14; l 10 10 10 14; l 14 10 14 14; l 18 10 18 14; l 6 18 6 21; l 12 18 12 21; l 18 18 18 21"},
-    {"spinner", "a 12 12 9 -90 270"}
+    {"spinner", "a 12 12 9 -90 270"},
+    {"gamepad", "r 2 7 20 11 4; l 6 12.5 10 12.5; l 8 10.5 8 14.5; f 15.5 11.5 1.1; f 18 13.8 1.1"},
+    {"file-text", "p 14 2 6 2 4 4 4 20 6 22 18 22 20 20 20 8 14 2; p 14 2 14 8 20 8; l 8 13 16 13; l 8 17 16 17"},
+    {"pie", "a 12 12 10 -90 270; p 12 2 12 12 22 12"},
+    {"activity", "p 2 12 6 12 9 4 15 20 18 12 22 12"},
+    {"thermo", "l 12 4 12 14; a 12 17.5 3.5 -60 300; a 12 4 2 180 180; l 10 4 10 14; l 14 4 14 14"}
   };
   public static bool Has(string n) { return n != null && (n == "theme" || defs.ContainsKey(n)); }
   // Accepte un nom d'icône ou un ancien glyphe Segoe MDL2 (compatibilité)
@@ -528,6 +609,21 @@ public static class LkIcons {
     }
     return l.ToArray();
   }
+  // v5.7 : chaque icône est analysée une seule fois puis gardée en mémoire
+  static readonly Dictionary<string, List<KeyValuePair<string, float[]>>> cache = new Dictionary<string, List<KeyValuePair<string, float[]>>>();
+  static List<KeyValuePair<string, float[]>> Parts(string name, string d) {
+    List<KeyValuePair<string, float[]>> l;
+    if (cache.TryGetValue(name, out l)) return l;
+    l = new List<KeyValuePair<string, float[]>>();
+    foreach (string part in d.Split(';')) {
+      string[] a = part.Trim().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+      if (a.Length == 0) continue;
+      float[] v = new float[a.Length - 1];
+      for (int i = 1; i < a.Length; i++) v[i - 1] = float.Parse(a[i], System.Globalization.CultureInfo.InvariantCulture);
+      l.Add(new KeyValuePair<string, float[]>(a[0], v));
+    }
+    cache[name] = l; return l;
+  }
   public static void Draw(Graphics g, string name, RectangleF box, Color col, float stroke) {
     if (name == "theme") name = LkBadge.Light ? "moon" : "sun";
     string d; if (name == null || !defs.TryGetValue(name, out d) || box.Width < 2) return;
@@ -538,17 +634,14 @@ public static class LkIcons {
     try {
       using (Pen pen = new Pen(col, Math.Max(1.25f, stroke * k))) using (SolidBrush br = new SolidBrush(col)) {
         pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; pen.LineJoin = LineJoin.Round;
-        foreach (string part in d.Split(';')) {
-          string[] a = part.Trim().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-          if (a.Length == 0) continue;
-          float[] v = new float[a.Length - 1];
-          for (int i = 1; i < a.Length; i++) v[i - 1] = float.Parse(a[i], System.Globalization.CultureInfo.InvariantCulture);
-          switch (a[0]) {
+        foreach (KeyValuePair<string, float[]> kv in Parts(name, d)) {
+          float[] v = kv.Value; string op = kv.Key;
+          switch (op) {
             case "l": g.DrawLine(pen, ox + v[0] * k, oy + v[1] * k, ox + v[2] * k, oy + v[3] * k); break;
             case "p": case "P": {
               PointF[] pts = new PointF[v.Length / 2];
               for (int i = 0; i < pts.Length; i++) pts[i] = new PointF(ox + v[2 * i] * k, oy + v[2 * i + 1] * k);
-              if (a[0] == "P") g.DrawPolygon(pen, pts); else g.DrawLines(pen, pts); break; }
+              if (op == "P") g.DrawPolygon(pen, pts); else g.DrawLines(pen, pts); break; }
             case "c": g.DrawEllipse(pen, ox + (v[0] - v[2]) * k, oy + (v[1] - v[2]) * k, 2 * v[2] * k, 2 * v[2] * k); break;
             case "e": g.DrawEllipse(pen, ox + (v[0] - v[2]) * k, oy + (v[1] - v[3]) * k, 2 * v[2] * k, 2 * v[3] * k); break;
             case "f": g.FillEllipse(br, ox + (v[0] - v[2]) * k, oy + (v[1] - v[2]) * k, 2 * v[2] * k, 2 * v[2] * k); break;
@@ -606,23 +699,76 @@ public class LkHero : Panel {
     LkAnim.Tween(400, p => { if (my != ptok) return; progShown = from + (v - from) * p; Invalidate(Rectangle.Inflate(ProgRect, 2, 2)); }, null);
   }
   public LkHero() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
+  // v5.7 : fond de carte + bordure + halo (Fill vide = ancien rendu à plat)
+  public Color Fill = Color.Empty, Border = Color.Empty, Glow = Color.FromArgb(140, 82, 255), Glow2 = Color.FromArgb(18, 224, 255); public Rectangle GlowRect = Rectangle.Empty; public int GlowAlpha = 46;
+  protected override CreateParams CreateParams { get { CreateParams cp = base.CreateParams; if (LkCard.Compose) cp.ExStyle |= 0x02000000; return cp; } }
   protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
   protected override void OnPaint(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
+    if (!Fill.IsEmpty) {
+      using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 0.5f, Height - 0.5f), Radius)) {
+        using (SolidBrush b = new SolidBrush(Fill)) g.FillPath(b, p);
+        if (!GlowRect.IsEmpty) {
+          g.SetClip(p);
+          using (GraphicsPath el = new GraphicsPath()) {
+            el.AddEllipse(GlowRect);
+            using (PathGradientBrush pb = new PathGradientBrush(el)) {
+              pb.CenterColor = Color.FromArgb(GlowAlpha, Glow); pb.SurroundColors = new Color[] { Color.FromArgb(0, Glow2) };
+              g.FillPath(pb, el);
+            }
+          }
+          g.ResetClip();
+        }
+      }
+      if (!Border.IsEmpty) using (GraphicsPath p = LkNative.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Radius - 0.5f)) using (Pen pn = new Pen(Border, 1f)) g.DrawPath(pn, p);
+    }
     if (Prog >= 0 && progShown >= 0 && ProgRect.Width > 0) {
       RectangleF pr = ProgRect; float rr = pr.Height / 2f;
       Color tr = LkBadge.Light ? Color.FromArgb(228, 228, 234) : Color.FromArgb(36, 36, 44);
       using (GraphicsPath t = LkNative.Round(pr, rr)) using (SolidBrush b = new SolidBrush(tr)) g.FillPath(b, t);
       float w = pr.Width * Math.Max(0f, Math.Min(100f, progShown)) / 100f;
-      if (w >= 1) { if (w < pr.Height) w = pr.Height; using (GraphicsPath t = LkNative.Round(new RectangleF(pr.X, pr.Y, w, pr.Height), rr)) using (SolidBrush b = new SolidBrush(Color.FromArgb(140, 82, 255))) g.FillPath(b, t); }
+      if (w >= 1) { if (w < pr.Height) w = pr.Height; using (GraphicsPath t = LkNative.Round(new RectangleF(pr.X, pr.Y, w, pr.Height), rr)) using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(pr.X - 1, pr.Y, pr.Width + 2, pr.Height), Color.FromArgb(18, 224, 255), Color.FromArgb(140, 82, 255), 0f)) g.FillPath(b, t); }
     }
   }
 }
 
 // Pastille de profil dans le bandeau (titre + sous-titre), sélection en blanc plein
+// v5.8 : élément de navigation de la barre latérale (icône + texte, survol en fondu, actif = fond teinté + barre cyan -> violet)
+public class LkNav : Control {
+  public Color HoverFill = Color.FromArgb(23, 23, 28), ActiveFill = Color.FromArgb(28, 23, 48), ActiveFore = Color.White;
+  public Color Accent = Color.FromArgb(18, 224, 255), Accent2 = Color.FromArgb(140, 82, 255);
+  public string Icon = null; public int Radius = 10; public float IconSize = 18f; public Font ActiveFont;
+  bool active; float h; int tok;
+  public LkNav() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); Cursor = Cursors.Hand; }
+  public bool Active { get { return active; } set { if (active == value) return; active = value; Invalidate(); } }
+  void Survol(float to) { float from = h; int my = ++tok; LkAnim.Tween(120, p => { if (my != tok) return; h = from + (to - from) * p; Invalidate(); }, null); }
+  protected override void OnMouseEnter(EventArgs e) { Survol(1f); base.OnMouseEnter(e); }
+  protected override void OnMouseLeave(EventArgs e) { Survol(0f); base.OnMouseLeave(e); }
+  protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
+  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
+  protected override void OnPaint(PaintEventArgs e) {
+    Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
+    Color fond = LkCard.BackOf(this);
+    RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+    if (active) {
+      using (GraphicsPath p = LkNative.Round(r, Radius))
+      using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, 0, Width + 1, Height), ActiveFill, LkAnim.Mix(ActiveFill, fond, 0.55f), 0f)) g.FillPath(b, p);
+      float bw = Math.Max(3f, Height * 0.08f), bh = Height * 0.5f, by = (Height - bh) / 2f;
+      using (GraphicsPath p = LkNative.Round(new RectangleF(0, by, bw, bh), bw / 2f))
+      using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, by - 1, bw, bh + 2), Accent, Accent2, 90f)) g.FillPath(b, p);
+    } else if (h > 0.01f) using (GraphicsPath p = LkNative.Round(r, Radius)) using (SolidBrush b = new SolidBrush(LkAnim.Mix(fond, HoverFill, h))) g.FillPath(b, p);
+    Color fc = active ? ActiveFore : LkAnim.Mix(ForeColor, ActiveFore, h * 0.75f);
+    float x0 = Height * 0.36f;
+    if (!string.IsNullOrEmpty(Icon)) { LkIcons.Draw(g, Icon, new RectangleF(x0, (Height - IconSize) / 2f, IconSize, IconSize), active ? LkAnim.Mix(Accent, Accent2, 0.35f) : fc, 2f); x0 += IconSize + Height * 0.32f; }
+    Font f = active && ActiveFont != null ? ActiveFont : Font;
+    TextRenderer.DrawText(g, Text, f, new Rectangle((int)x0, 0, Math.Max(10, Width - (int)x0 - 6), Height), fc, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+  }
+}
+
 public class LkPill : Control {
   // v5.4 (épuré) : contour fin, rempli d'une teinte légère quand il est choisi
   public string Sub = ""; public bool Selected; public int Radius = 12; public Font SubFont; float h; int tok;
+  public string Icon = null; public bool SubRight = false;   // v5.8 : ligne large (icône, nom à gauche, nombre de réglages à droite)
   public LkPill() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true); BackColor = Color.Transparent; Cursor = Cursors.Hand; }
   void Survol(float to) { float from = h; int my = ++tok; LkAnim.Tween(130, p => { if (my != tok) return; h = from + (to - from) * p; Invalidate(); }, null); }
   protected override void OnMouseEnter(EventArgs e) { Survol(1f); base.OnMouseEnter(e); }
@@ -645,6 +791,16 @@ public class LkPill : Control {
     int pad = (int)(Height * 0.28f);
     Color c1 = Selected ? acc : (L ? Color.FromArgb(24, 24, 31) : Color.FromArgb(237, 237, 242));
     Color c2 = L ? Color.FromArgb(95, 95, 110) : Color.FromArgb(139, 139, 154);
+    if (SubRight) {
+      float isz = Height * 0.40f, x0 = Height * 0.30f;
+      if (!string.IsNullOrEmpty(Icon)) { LkIcons.Draw(g, Icon, new RectangleF(x0, (Height - isz) / 2f, isz, isz), acc, 2.2f); x0 += isz + Height * 0.26f; }
+      TextFormatFlags tl = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis;
+      TextFormatFlags tr = TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
+      int ws = SubFont != null ? TextRenderer.MeasureText(g, Sub, SubFont, Size.Empty, tr).Width : 0;
+      TextRenderer.DrawText(g, Text, Font, new Rectangle((int)x0, 0, Math.Max(10, Width - (int)x0 - ws - pad * 2), Height), c1, tl);
+      if (SubFont != null) TextRenderer.DrawText(g, Sub, SubFont, new Rectangle(0, 0, Width - pad, Height), c2, tr);
+      return;
+    }
     using (SolidBrush b1 = new SolidBrush(c1)) g.DrawString(Text, Font, b1, pad, Height * 0.14f);
     if (SubFont != null) using (SolidBrush b2 = new SolidBrush(c2)) g.DrawString(Sub, SubFont, b2, pad, Height * 0.54f);
   }
@@ -654,6 +810,30 @@ public class LkPill : Control {
 public class LkOrb : Control {
   public string Sub = ""; public Font SubFont; bool busy; float phase; float h; int tok; bool loop; Stopwatch sw = Stopwatch.StartNew(); int dots;
   float ripple; float prog = -1f, progShown = -1f; int ptok;
+  // v5.8 : mode anneau de score (Score >= 0) : piste + arc dégradé cyan -> violet, grand nombre au centre.
+  // Pendant OPTIMISER, l'arc montre la progression à la place du score.
+  public float Score = -1f; float scoreShown = 0f; int stok; public Font SmallFont;
+  public void SetScore(float v) {
+    v = Math.Max(0f, Math.Min(1f, v)); float from = Score < 0f ? 0f : scoreShown; Score = v; int my = ++stok;
+    LkAnim.Tween(700, p => { if (my != stok) return; scoreShown = from + (v - from) * (1f - (1f - p) * (1f - p)); Invalidate(); }, () => { if (my == stok) { scoreShown = v; Invalidate(); } });
+  }
+  void PaintScore(Graphics g, bool L) {
+    float cx = Width / 2f, cy = Height / 2f, R = Math.Min(Width, Height) / 2f - 2f, w = Math.Max(4f, R * 0.15f), rr = R - w / 2f;
+    float ph = LkAnim.On && busy ? phase : 0f;
+    Color piste = L ? Color.FromArgb(228, 228, 236) : Color.FromArgb(40, 40, 50);
+    piste = LkAnim.Mix(piste, L ? Color.FromArgb(210, 200, 250) : Color.FromArgb(62, 50, 110), ph * 0.6f);
+    RectangleF rc = new RectangleF(cx - rr, cy - rr, rr * 2, rr * 2);
+    using (Pen tr = new Pen(piste, w)) g.DrawEllipse(tr, rc);
+    float frac = progShown >= 0f ? progShown : scoreShown;
+    if (frac > 0.003f) using (LinearGradientBrush gb = new LinearGradientBrush(new RectangleF(cx - R, cy - R, R * 2, R * 2), Color.FromArgb(18, 224, 255), Color.FromArgb(140, 82, 255), 135f))
+      using (Pen pn = new Pen(gb, w)) { pn.StartCap = LineCap.Round; pn.EndCap = LineCap.Round; g.DrawArc(pn, rc, -90f, 360f * Math.Min(1f, frac)); }
+    string t = Text; if (busy && LkAnim.On) t = Text.TrimEnd('.', ' ') + new string('.', dots).PadRight(3);
+    StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center;
+    float ri = rr - w;
+    Font ft = (SmallFont != null && Text.TrimEnd('.', ' ').Length > 3) ? SmallFont : Font;
+    using (SolidBrush b = new SolidBrush(ForeColor)) g.DrawString(t, ft, b, new RectangleF(cx - ri - 4, cy - ri * 0.62f, ri * 2 + 8, ri * 0.95f), sf);
+    if (SubFont != null) using (SolidBrush b = new SolidBrush(L ? Color.FromArgb(95, 95, 110) : Color.FromArgb(139, 139, 154))) g.DrawString(Sub, SubFont, b, new RectangleF(cx - ri, cy + ri * 0.30f, ri * 2, ri * 0.45f), sf);
+  }
   // v5.3 : anneau de progression autour du bouton (v < 0 : caché)
   public void SetProgress(float v) {
     if (v < 0f) { ++ptok; prog = progShown = -1f; Invalidate(); return; }
@@ -681,20 +861,241 @@ public class LkOrb : Control {
     // v5.4 (épuré) : disque plein violet, anneau fin qui respire très doucement, anneau de progression
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
     bool L = LkBadge.Light;
+    if (Score >= 0f) { PaintScore(g, L); return; }
     Color acc = Color.FromArgb(140, 82, 255);
     float cx = Width / 2f, cy = Height / 2f, R = Math.Min(Width, Height) / 2f - 2;
     float ph = LkAnim.On ? phase : 0f;
     float rp = R * 0.94f, w = Math.Max(2f, R * 0.035f);
     Color piste = L ? Color.FromArgb(226, 222, 245) : Color.FromArgb(40, 34, 64);
     using (Pen tr = new Pen(LkAnim.Mix(piste, Color.FromArgb(L ? 205 : 62, L ? 196 : 50, L ? 245 : 110), busy ? ph : ph * 0.5f), w)) g.DrawEllipse(tr, cx - rp, cy - rp, rp * 2, rp * 2);
-    if (progShown >= 0f && progShown > 0.002f) using (Pen pn = new Pen(L ? Color.FromArgb(124, 77, 255) : Color.FromArgb(167, 139, 250), w * 1.6f)) { pn.StartCap = LineCap.Round; pn.EndCap = LineCap.Round; g.DrawArc(pn, cx - rp, cy - rp, rp * 2, rp * 2, -90f, 360f * progShown); }
+    if (progShown >= 0f && progShown > 0.002f) using (LinearGradientBrush gb = new LinearGradientBrush(new RectangleF(cx - rp - 2, cy - rp - 2, rp * 2 + 4, rp * 2 + 4), Color.FromArgb(18, 224, 255), Color.FromArgb(167, 139, 250), 45f)) using (Pen pn = new Pen(gb, w * 1.6f)) { pn.StartCap = LineCap.Round; pn.EndCap = LineCap.Round; g.DrawArc(pn, cx - rp, cy - rp, rp * 2, rp * 2, -90f, 360f * progShown); }
     float ri = R * (0.78f + 0.015f * h);
     Color fill = busy ? LkAnim.Mix(acc, Color.FromArgb(160, 112, 255), ph * 0.6f) : LkAnim.Mix(acc, Color.FromArgb(122, 64, 238), h);
-    using (SolidBrush b = new SolidBrush(fill)) g.FillEllipse(b, cx - ri, cy - ri, ri * 2, ri * 2);
+    Color fill2 = LkAnim.Mix(Color.FromArgb(76, 110, 255), Color.FromArgb(60, 92, 240), busy ? 0f : h);
+    using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(cx - ri - 1, cy - ri - 1, ri * 2 + 2, ri * 2 + 2), fill2, fill, 45f)) g.FillEllipse(b, cx - ri, cy - ri, ri * 2, ri * 2);
     string t = Text; if (busy && LkAnim.On) t = Text.TrimEnd('.', ' ') + new string('.', dots).PadRight(3);
     StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center;
     using (SolidBrush b = new SolidBrush(Color.White)) g.DrawString(t, Font, b, new RectangleF(cx - ri, cy - ri * 0.55f, ri * 2, ri * 0.7f), sf);
     if (SubFont != null) using (SolidBrush b = new SolidBrush(Color.FromArgb(215, 255, 255, 255))) g.DrawString(Sub, SubFont, b, new RectangleF(cx - ri * 0.92f, cy + ri * 0.12f, ri * 1.84f, ri * 0.5f), sf);
+  }
+}
+
+// v5.7 : titre de section : petite barre cyan -> violet, texte, filet fin jusqu'au bord (un seul contrôle)
+public class LkSection : Control {
+  public Color Line = Color.FromArgb(37, 37, 45); public Color A1 = Color.FromArgb(18, 224, 255), A2 = Color.FromArgb(140, 82, 255);
+  public LkSection() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
+  protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
+  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
+  protected override void OnPaint(PaintEventArgs e) {
+    Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
+    float bh = Height * 0.62f, bw = Math.Max(3f, Height * 0.16f), by = (Height - bh) / 2f;
+    using (GraphicsPath p = LkNative.Round(new RectangleF(0, by, bw, bh), bw / 2f))
+    using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, by - 1, bw, bh + 2), A1, A2, 90f)) g.FillPath(b, p);
+    int x = (int)(bw + Height * 0.45f);
+    TextFormatFlags tf = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
+    int tw = TextRenderer.MeasureText(g, Text, Font, Size.Empty, tf).Width;
+    TextRenderer.DrawText(g, Text, Font, new Rectangle(x, 0, Width - x, Height), ForeColor, LkCard.BackOf(this), tf);
+    int lx = x + tw + (int)(Height * 0.6f);
+    if (lx < Width - 4) using (Pen pn = new Pen(Line, 1f)) { g.SmoothingMode = SmoothingMode.None; g.DrawLine(pn, lx, Height / 2, Width - 2, Height / 2); }
+  }
+}
+
+// v5.7 : mini-courbe d'historique (moniteur en direct) : 40 dernières valeurs, trait en dégradé + remplissage léger
+public class LkSpark : Control {
+  int[] v = new int[40]; int n = 0; public Color A1 = Color.FromArgb(18, 224, 255), A2 = Color.FromArgb(140, 82, 255);
+  public LkSpark() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
+  public void Push(int x) { if (x < 0) return; x = Math.Max(0, Math.Min(100, x)); if (n < v.Length) v[n++] = x; else { Array.Copy(v, 1, v, 0, v.Length - 1); v[v.Length - 1] = x; } Invalidate(); }
+  public void Clear() { n = 0; Invalidate(); }
+  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
+  protected override void OnPaint(PaintEventArgs e) {
+    if (n < 2 || Width < 4 || Height < 4) return;
+    Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
+    float dx = (Width - 2f) / (v.Length - 1), h = Height - 3f; PointF[] pts = new PointF[n];
+    for (int i = 0; i < n; i++) pts[i] = new PointF(1 + (v.Length - n + i) * dx, 1.5f + h * (1f - v[i] / 100f));
+    using (GraphicsPath f = new GraphicsPath()) {
+      f.AddLines(pts); f.AddLine(pts[n - 1].X, pts[n - 1].Y, pts[n - 1].X, Height); f.AddLine(pts[n - 1].X, Height, pts[0].X, Height); f.CloseFigure();
+      using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, 0, Width, Height + 1), Color.FromArgb(46, A2), Color.FromArgb(0, A2), 90f)) g.FillPath(b, f);
+    }
+    using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(-1, 0, Width + 2, Height), A1, A2, 0f)) using (Pen p = new Pen(lb, Math.Max(1.5f, Height / 22f))) { p.LineJoin = LineJoin.Round; g.DrawLines(p, pts); }
+  }
+}
+
+// v5.7 : transition de page « instantané » : au lieu de déplacer des dizaines de fenêtres (cartes, textes,
+// interrupteurs) à chaque image, la page est photographiée UNE fois (une image par bloc) et un seul contrôle
+// anime les images ; la vraie page est dessous, déjà prête. Un clic passe au travers (HTTRANSPARENT).
+public class LkFade : Control {
+  class It { public Bitmap B; public Rectangle R; public int K; }
+  List<It> items = new List<It>(); Color bg; int dy, dur, pas, kmax; Stopwatch sw; int tok;
+  static Dictionary<Control, LkFade> parents = new Dictionary<Control, LkFade>();
+  public static int Erreurs = 0;
+  public LkFade() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.Opaque, true); Visible = false; TabStop = false; }
+  public static LkFade Get(Control parent) {
+    LkFade f; if (parents.TryGetValue(parent, out f) && !f.IsDisposed) return f;
+    f = new LkFade(); parent.Controls.Add(f); parents[parent] = f; return f;
+  }
+  public static void StopAll() { foreach (LkFade f in parents.Values) if (!f.IsDisposed) f.Stop(); }
+  protected override void WndProc(ref Message m) { if (m.Msg == 0x84) { m.Result = (IntPtr)(-1); return; } base.WndProc(ref m); }
+  static bool Natif(Control c) { foreach (Control x in c.Controls) { if (x is TextBoxBase || x is WebBrowserBase || x is ListControl || Natif(x)) return true; } return false; }
+  public void Stop() {
+    ++tok; if (Visible) Visible = false;
+    foreach (It i in items) { try { i.B.Dispose(); } catch { } }
+    items.Clear(); sw = null;
+  }
+  public bool Prepare(Control page, Color fond, int decalage) {
+    Stop();
+    if (!LkAnim.On || LkAnim.Reduit || page == null || page.Parent != Parent || page.Width < 8 || page.Height < 8) return false;
+    try {
+      Control content = page; int oy = 0;
+      LkScroll sc = page as LkScroll; if (sc != null) { content = sc.Content; oy = sc.Content.Top; }
+      if (Natif(content)) return false;
+      List<Control> l = new List<Control>();
+      foreach (Control c in content.Controls) {
+        if (!c.Visible || c.Width <= 0 || c.Height <= 0 || c is LkFade) continue;
+        int y = c.Top + oy; if (y >= page.Height || y + c.Height <= 0) continue; l.Add(c);
+      }
+      if (l.Count == 0 || l.Count > 90) return false;
+      List<Control> ordre = new List<Control>(l);
+      ordre.Sort((a, b) => a.Top != b.Top ? a.Top.CompareTo(b.Top) : a.Left.CompareTo(b.Left));
+      // dessin du bas vers le haut de la pile (index élevé = dessous)
+      l.Sort((a, b) => content.Controls.GetChildIndex(b).CompareTo(content.Controls.GetChildIndex(a)));
+      kmax = 0;
+      foreach (Control c in l) {
+        Bitmap bm = new Bitmap(c.Width, c.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+        c.DrawToBitmap(bm, new Rectangle(0, 0, c.Width, c.Height));
+        int k = Math.Min(ordre.IndexOf(c), 11); if (k > kmax) kmax = k;
+        items.Add(new It { B = bm, R = new Rectangle(c.Left, c.Top + oy, c.Width, c.Height), K = k });
+      }
+    } catch (Exception) { Erreurs++; Stop(); return false; }
+    bg = fond; dy = decalage; Bounds = page.Bounds; BringToFront(); Visible = true; return true;
+  }
+  public void Play(int ms, int pasMs) {
+    if (items.Count == 0) { Stop(); return; }
+    dur = Math.Max(1, (int)(ms * LkAnim.Lent)); pas = (int)(pasMs * LkAnim.Lent); sw = Stopwatch.StartNew(); int my = ++tok;
+    LkAnim.Add(() => {
+      if (my != tok || IsDisposed) return false;
+      if (sw.ElapsedMilliseconds >= dur + kmax * pas + 16) { Stop(); return false; }
+      Invalidate(); return true;
+    });
+  }
+  protected override void OnPaint(PaintEventArgs e) {
+    Graphics g = e.Graphics; g.Clear(bg);
+    g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half; g.CompositingQuality = CompositingQuality.HighSpeed;
+    long el = sw == null ? 0 : sw.ElapsedMilliseconds;
+    foreach (It i in items) {
+      float p = Math.Max(0f, Math.Min(1f, (float)(el - i.K * pas) / dur)); float q = LkAnim.Ease(p);
+      int y = i.R.Y + (int)Math.Round(dy * (1f - q));
+      g.DrawImage(i.B, new Rectangle(i.R.X, y, i.R.Width, i.R.Height), 0, 0, i.R.Width, i.R.Height, GraphicsUnit.Pixel);
+      if (q < 0.999f) using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(255 * (1f - q)), bg))) g.FillRectangle(b, i.R.X, y, i.R.Width, i.R.Height);
+    }
+  }
+}
+
+// v5.7 : moniteur en direct, lu sur un fil d'arrière-plan (jamais sur celui de l'interface) et seulement
+// quand le Tableau de bord est affiché : charge 3D du GPU et mémoire vidéo (compteurs Windows « GPU Engine »
+// et « GPU Adapter Memory », Windows 10 1709+), température des zones thermiques si Windows la donne.
+public static class LkMonitor {
+  public static volatile bool Wanted = false;
+  static volatile int gpu = -1, temp = -1; static long vram = -1; static System.Threading.Thread th;
+  public static int Gpu { get { return gpu; } }
+  public static int Temp { get { return temp; } }
+  public static long Vram { get { return System.Threading.Interlocked.Read(ref vram); } }
+  public static string Erreur = "";
+  static Dictionary<string, CounterSample> prev = new Dictionary<string, CounterSample>();
+  public static void Start() {
+    if (th != null) return;
+    th = new System.Threading.Thread(Boucle); th.IsBackground = true; th.Priority = System.Threading.ThreadPriority.BelowNormal; th.Name = "LkMonitor"; th.Start();
+  }
+  static void Boucle() {
+    bool gOk = true, vOk = true, tOk = true; int n = 0;
+    while (true) {
+      try {
+        if (Wanted) {
+          if (gOk) gOk = LireGpu();
+          if (vOk) vOk = LireVram();
+          if (tOk && n % 3 == 0) tOk = LireTemp();
+          n++;
+        } else prev.Clear();
+      } catch (Exception ex) { Erreur = ex.Message; }
+      System.Threading.Thread.Sleep(Wanted ? 2000 : 700);
+    }
+  }
+  static string Luid(string n) { int i = n.IndexOf("luid_", StringComparison.OrdinalIgnoreCase); if (i < 0) return ""; int j = n.IndexOf("_phys", i, StringComparison.OrdinalIgnoreCase); return j > i ? n.Substring(i, j - i) : n.Substring(i); }
+  static bool LireGpu() {
+    try {
+      if (!PerformanceCounterCategory.Exists("GPU Engine")) return false;
+      InstanceDataCollectionCollection all = new PerformanceCounterCategory("GPU Engine").ReadCategory();
+      InstanceDataCollection col = all["Utilization Percentage"]; if (col == null) return false;
+      Dictionary<string, CounterSample> cur = new Dictionary<string, CounterSample>(); Dictionary<string, float> parLuid = new Dictionary<string, float>();
+      foreach (InstanceData d in col.Values) {
+        string nm = d.InstanceName; if (nm.IndexOf("engtype_3D", StringComparison.OrdinalIgnoreCase) < 0) continue;
+        CounterSample s = d.Sample; cur[nm] = s; string l = Luid(nm); if (!parLuid.ContainsKey(l)) parLuid[l] = 0f;
+        CounterSample p; if (prev.TryGetValue(nm, out p)) { try { parLuid[l] += CounterSample.Calculate(p, s); } catch { } }
+      }
+      bool premier = prev.Count == 0; prev = cur;
+      if (premier) return true;
+      float mx = 0f; foreach (float x in parLuid.Values) if (x > mx) mx = x;
+      gpu = (int)Math.Round(Math.Max(0f, Math.Min(100f, mx)));
+      return true;
+    } catch (Exception ex) { Erreur = "GPU : " + ex.Message; gpu = -1; return false; }
+  }
+  static bool LireVram() {
+    try {
+      if (!PerformanceCounterCategory.Exists("GPU Adapter Memory")) return false;
+      InstanceDataCollection col = new PerformanceCounterCategory("GPU Adapter Memory").ReadCategory()["Dedicated Usage"]; if (col == null) return false;
+      long mx = 0; foreach (InstanceData d in col.Values) if (d.RawValue > mx) mx = d.RawValue;
+      System.Threading.Interlocked.Exchange(ref vram, mx); return true;
+    } catch (Exception ex) { Erreur = "VRAM : " + ex.Message; return false; }
+  }
+  static bool LireTemp() {
+    try {
+      if (!PerformanceCounterCategory.Exists("Thermal Zone Information")) return false;
+      InstanceDataCollectionCollection all = new PerformanceCounterCategory("Thermal Zone Information").ReadCategory();
+      InstanceDataCollection hp = all["High Precision Temperature"], tp = all["Temperature"];
+      double mx = -1;
+      if (hp != null) foreach (InstanceData d in hp.Values) { double c = d.RawValue / 10.0 - 273.15; if (Plausible(c) && c > mx) mx = c; }
+      if (mx < 0 && tp != null) foreach (InstanceData d in tp.Values) { double c = d.RawValue - 273.15; if (Plausible(c) && c > mx) mx = c; }
+      temp = mx < 0 ? -1 : (int)Math.Round(mx); return mx >= 0;
+    } catch { return false; }
+  }
+  static bool Plausible(double c) { return c >= 15 && c <= 115 && Math.Abs(c - 27.8) > 0.15; }
+}
+
+// v5.7 : taille d'un dossier (lecture seule), rapide, sans suivre les jonctions, avec un temps maximum
+public static class LkDisk {
+  public static long Size(string path, int maxMs, out bool complet) {
+    complet = true; long total = 0; Stopwatch sw = Stopwatch.StartNew();
+    Stack<string> pile = new Stack<string>(); pile.Push(path);
+    while (pile.Count > 0) {
+      if (sw.ElapsedMilliseconds > maxMs) { complet = false; break; }
+      string d = pile.Pop();
+      try {
+        System.IO.DirectoryInfo di = new System.IO.DirectoryInfo(d);
+        foreach (System.IO.FileSystemInfo fi in di.EnumerateFileSystemInfos()) {
+          try {
+            if ((fi.Attributes & System.IO.FileAttributes.ReparsePoint) != 0) continue;
+            if ((fi.Attributes & System.IO.FileAttributes.Directory) != 0) pile.Push(fi.FullName);
+            else total += ((System.IO.FileInfo)fi).Length;
+          } catch { }
+        }
+      } catch { }
+    }
+    return total;
+  }
+  // sous-dossiers directs les plus gros : "chemin|octets|complet" (triés)
+  public static string[] Top(string path, int n, int maxMs) {
+    List<KeyValuePair<string, long>> l = new List<KeyValuePair<string, long>>(); Stopwatch sw = Stopwatch.StartNew(); bool tout = true;
+    try {
+      foreach (string d in System.IO.Directory.GetDirectories(path)) {
+        try { if ((new System.IO.DirectoryInfo(d).Attributes & System.IO.FileAttributes.ReparsePoint) != 0) continue; } catch { continue; }
+        int reste = maxMs - (int)sw.ElapsedMilliseconds; if (reste < 50) { tout = false; break; }
+        bool c; long s = Size(d, Math.Min(reste, maxMs / 3), out c); if (!c) tout = false;
+        l.Add(new KeyValuePair<string, long>(d, s));
+      }
+    } catch { }
+    l.Sort((a, b) => b.Value.CompareTo(a.Value));
+    List<string> r = new List<string>();
+    for (int i = 0; i < l.Count && i < n; i++) r.Add(l[i].Key + "|" + l[i].Value + "|" + (tout ? "1" : "0"));
+    return r.ToArray();
   }
 }
 
@@ -789,8 +1190,16 @@ try {
 function S($v) { [int][math]::Round($v * $sc) }
 function Pt($x,$y) { New-Object Drawing.Point((S $x),(S $y)) }
 function Sz($w,$h) { New-Object Drawing.Size((S $w),(S $h)) }
+# v5.7 : polices gardées en cache (une seule police par taille / style au lieu d'une par contrôle)
+$script:polices = @{}
 function Police($px, $style = "Regular", $famille = "Segoe UI") {
-  New-Object Drawing.Font($famille, [float]($px * $sc), [Drawing.FontStyle]$style, [Drawing.GraphicsUnit]::Pixel) }
+  $k = "$px|$style|$famille"; $p = $script:polices[$k]
+  if (-not $p) { $p = New-Object Drawing.Font($famille, [float]($px * $sc), [Drawing.FontStyle]$style, [Drawing.GraphicsUnit]::Pixel); $script:polices[$k] = $p }
+  return $p }
+# v5.7 : gel du dessin d'un conteneur pendant qu'on le remplit (une seule image à la fin)
+function Geler($c, [bool]$gel) { try { if ($c -and $c.IsHandleCreated) { [LkNative]::Redraw($c, -not $gel) } } catch {} }
+# v5.7 : vider une page en libérant vraiment les contrôles (avant : Controls.Clear() seul = handles jamais rendus)
+function Vider($pg) { $l = @($pg.Controls); $pg.Controls.Clear(); foreach ($c in $l) { try { $c.Dispose() } catch {} } }
 
 # ===================== DÉTECTION DU MATÉRIEL =====================
 # v5.2 : chaque lecture est protégée (si l'une échoue, l'appli s'ouvre quand même) et affichée sur l'écran de chargement
@@ -932,29 +1341,37 @@ function Hex($h) { [Drawing.ColorTranslator]::FromHtml($h) }
 # Chaque couleur claire est différente de toutes les autres : le changement de thème en direct
 # remplace une couleur par son équivalent dans toute la fenêtre.
 $palettes = @{
-  sombre = [ordered]@{ Titre = "#121216"; Fond = "#121217"; Carte = "#18181e"; CarteSurvol = "#1e1e25"; Blanc = "#ededf2"; Gris = "#8b8b9a"; Gris2 = "#6c6c7a"; Gris3 = "#565663"
-    AccentClair = "#a78bfa"; NavActif = "#1c1730"; NavSurvol = "#17171c"; Piste = "#25252d"; Piste2 = "#1f1f26"; Pouce = "#2d2d36"; Texte2 = "#c6c6d2"; BoutonTitre = "#202027"; Off = "#35353f"; Orange = "#f0a03c"; Vert = "#a594f9"; Rouge = "#f0716f" }
-  clair  = [ordered]@{ Titre = "#f7f7f9"; Fond = "#f7f7fa"; Carte = "#fdfdfe"; CarteSurvol = "#f1f1f5"; Blanc = "#18181f"; Gris = "#5f5f6e"; Gris2 = "#74748a"; Gris3 = "#9a9aab"
-    AccentClair = "#7c4dff"; NavActif = "#ece6ff"; NavSurvol = "#ececf1"; Piste = "#e4e4ea"; Piste2 = "#eaeaef"; Pouce = "#cdcdd8"; Texte2 = "#33333f"; BoutonTitre = "#e6e6ec"; Off = "#c9c9d4"; Orange = "#b45309"; Vert = "#6d4ce0"; Rouge = "#b91c1c" }
+  sombre = [ordered]@{ Titre = "#0e0e13"; Fond = "#121217"; Carte = "#18181e"; CarteSurvol = "#1e1e25"; Blanc = "#ededf2"; Gris = "#8b8b9a"; Gris2 = "#6c6c7a"; Gris3 = "#565663"
+    AccentClair = "#a78bfa"; NavActif = "#1c1730"; NavSurvol = "#17171c"; Piste = "#25252d"; Piste2 = "#1f1f26"; Pouce = "#2d2d36"; Texte2 = "#c6c6d2"; BoutonTitre = "#202027"; Off = "#35353f"; Orange = "#f0a03c"; Vert = "#a594f9"; Rouge = "#f0716f"; Bord = "#24242c"; BordSurvol = "#3b3557"; Vif = "#3fe3ff" }
+  clair  = [ordered]@{ Titre = "#efeff4"; Fond = "#f7f7fa"; Carte = "#fdfdfe"; CarteSurvol = "#f1f1f5"; Blanc = "#18181f"; Gris = "#5f5f6e"; Gris2 = "#74748a"; Gris3 = "#9a9aab"
+    AccentClair = "#7c4dff"; NavActif = "#ece6ff"; NavSurvol = "#ececf1"; Piste = "#e4e4ea"; Piste2 = "#eaeaef"; Pouce = "#cdcdd8"; Texte2 = "#33333f"; BoutonTitre = "#e6e6ec"; Off = "#c9c9d4"; Orange = "#b45309"; Vert = "#6d4ce0"; Rouge = "#b91c1c"; Bord = "#e3e3eb"; BordSurvol = "#cdc2f6"; Vif = "#0e7490" }
 }
 function Charger-Palette($clair) {
   $pl = $palettes[$(if ($clair) { "clair" } else { "sombre" })]
   $script:cTitre = Hex $pl.Titre; $script:cSide = Hex $pl.Titre; $script:cFond = Hex $pl.Fond; $script:cCarte = Hex $pl.Carte; $script:cCarteSurvol = Hex $pl.CarteSurvol
   $script:cBlanc = Hex $pl.Blanc; $script:cGris = Hex $pl.Gris; $script:cGris2 = Hex $pl.Gris2; $script:cGris3 = Hex $pl.Gris3
-  $script:cAccentClair = Hex $pl.AccentClair; $script:cNavActif = Hex $pl.NavActif; $script:cNavSurvol = Hex $pl.NavSurvol
+  $script:cVif = Hex $pl.Vif; $script:cAccentClair = Hex $pl.AccentClair; $script:cNavActif = Hex $pl.NavActif; $script:cNavSurvol = Hex $pl.NavSurvol
   $script:cPiste = Hex $pl.Piste; $script:cPiste2 = Hex $pl.Piste2; $script:cPouce = Hex $pl.Pouce; $script:cTexte2 = Hex $pl.Texte2; $script:cBoutonTitre = Hex $pl.BoutonTitre; $script:cOff = Hex $pl.Off
   $script:cTexteActif = if ($clair) { Hex "#4b22c9" } else { [Drawing.Color]::White }
   $script:cOrange = Hex $pl.Orange; $script:cVert = Hex $pl.Vert; $script:cRouge = Hex $pl.Rouge
+  $script:cBord = Hex $pl.Bord; $script:cBordSurvol = Hex $pl.BordSurvol
 }
 Charger-Palette $script:themeClair
 [LkBadge]::Light = $script:themeClair
+[LkCard]::BordDefaut = $cBord; [LkCard]::BordSurvolDefaut = $cBordSurvol
+# v5.7 : rendu lissé (WS_EX_COMPOSITED) désactivable dans Paramètres (pris en compte au prochain démarrage)
+[LkCard]::Compose = -not ("$((Get-ItemProperty -Path $cleConfig -Name RenduLisse -ErrorAction SilentlyContinue).RenduLisse)" -eq "0")
 $cAccent  = Hex "#8c52ff"
+$cAccent2 = Hex "#5468ff"   # v5.7 : départ du dégradé des boutons principaux (bleu du logo, texte blanc lisible)
+$cCyan    = Hex "#12e0ff"
 
 # ===================== FENÊTRE =====================
 Etape-Chargement 70 80 "Préparation de l'interface..."
+# v5.8 : barre latérale à gauche (232 px), la zone des pages garde ses 1000 px
+$largeurNav = 232
 $f = New-Object Windows.Forms.Form
 $f.Text = "LuKZyR Optimisation"
-$f.ClientSize = Sz 1000 660
+$f.ClientSize = Sz (1000 + $largeurNav) 660
 $f.StartPosition = "CenterScreen"
 $f.FormBorderStyle = "None"
 $f.BackColor = $cFond
@@ -986,12 +1403,16 @@ function Icone($parent, $texte, $x, $y, $w, $h, $taille, $couleur, $fond, $Puce 
   $parent.Controls.Add($i); return $i
 }
 
-# --- Barre du haut : logo, onglets, paramètres, thème, réduire, fermer ---
+# --- v5.8 : barre latérale (logo, recherche, navigation à icônes, « Tout annuler », Paramètres) ---
+$nav = New-Object LkPanel; $nav.Location = Pt 0 0; $nav.Size = Sz $largeurNav 660; $nav.BackColor = $cSide
+$f.Controls.Add($nav)
+$traitNav = New-Object Windows.Forms.Panel; $traitNav.Location = Pt ($largeurNav - 1) 0; $traitNav.Size = Sz 1 660; $traitNav.BackColor = $cPiste2
+$nav.Controls.Add($traitNav)
+# --- Barre du haut (au-dessus des pages) : fil d'Ariane, thème, réduire, fermer ---
 $titreBar = New-Object Windows.Forms.Panel
-$titreBar.Location = Pt 0 0; $titreBar.Size = Sz 1000 56; $titreBar.BackColor = $cTitre
+$titreBar.Location = Pt $largeurNav 0; $titreBar.Size = Sz 1000 56; $titreBar.BackColor = $cFond
 DoubleTampon $titreBar
 $f.Controls.Add($titreBar)
-$logoImg = New-Object Windows.Forms.PictureBox; $logoImg.Location = Pt 20 15; $logoImg.Size = Sz 26 26; $logoImg.SizeMode = "Zoom"; $logoImg.BackColor = $cTitre
 # v5.5 : logo réduit une seule fois en haute qualité à la taille exacte (net en petite taille)
 function Logo-Net($taille) {
   try {
@@ -1001,33 +1422,25 @@ function Logo-Net($taille) {
     $gr.DrawImage($src, 0, 0, $n, $n); $gr.Dispose(); $src.Dispose(); return $bm
   } catch { return $null }
 }
-$logoImg.SizeMode = "CenterImage"; $logoImg.Image = Logo-Net 26
-$titreBar.Controls.Add($logoImg)
-$traitTitre = New-Object Windows.Forms.Panel; $traitTitre.Location = Pt 0 55; $traitTitre.Size = Sz 1000 1; $traitTitre.BackColor = $cPiste2
-$titreBar.Controls.Add($traitTitre)
-$logo = Lbl $titreBar "LuKZyR" 52 7 120 26 (Police 16 "Bold") $cBlanc $cTitre; $logo.TextAlign = "MiddleLeft"
-$credit = Lbl $titreBar "Optimisation" 53 32 120 16 (Police 10.5) $cGris2 $cTitre; $credit.TextAlign = "MiddleLeft"
-# v0.1 : petit badge « BÊTA » à côté du nom
-$wLogo = [math]::Ceiling((Largeur "LuKZyR" $logo.Font) / $sc) + 2; $logo.Width = S $wLogo
+$logoImg = New-Object Windows.Forms.PictureBox; $logoImg.Location = Pt 20 18; $logoImg.Size = Sz 34 34; $logoImg.SizeMode = "CenterImage"; $logoImg.BackColor = $cSide
+$logoImg.Image = Logo-Net 34
+$nav.Controls.Add($logoImg)
+$logo = Lbl $nav "LuKZyR" 62 15 150 24 (Police 17 "Bold") $cBlanc $cSide; $logo.TextAlign = "MiddleLeft"
+$credit = Lbl $nav ("Optimisation · " + (Version-Affichee)) 63 39 160 16 (Police 10.5 "Bold") $cGris2 $cSide; $credit.TextAlign = "MiddleLeft"
+$tip.SetToolTip($credit, (T "Version bêta : merci de signaler les bugs (Journal > Exporter le journal)."))
 $bBeta = $null
-if ($VersionBeta) {
-  $bBeta = New-Object LkBadge; $bBeta.Text = (T "BÊTA"); $bBeta.Font = Police 9.5 "Bold"; $bBeta.Radius = S 5; $bBeta.Alpha = 26
-  $bBeta.Accent = Hex "#a78bfa"; $bBeta.AccentLight = Hex "#6d28d9"
-  $bBeta.Location = Pt (52 + $wLogo + 4) 11; $bBeta.Size = New-Object Drawing.Size(((Largeur $bBeta.Text $bBeta.Font) + (S 12)), (S 18))
-  $titreBar.Controls.Add($bBeta); $tip.SetToolTip($bBeta, (T "Version bêta : merci de signaler les bugs (Journal > Exporter le journal)."))
-}
-foreach ($c in $titreBar, $logo, $credit, $logoImg) { $c.Add_MouseDown({ if ($_.Button -eq "Left") { [LkNative]::Drag($f) } }) }
+$lFil = Lbl $titreBar "" 32 0 640 56 (Police 12 "Bold") $cGris2 $cFond; $lFil.TextAlign = "MiddleLeft"
+foreach ($c in $nav, $titreBar, $lFil, $logo, $credit, $logoImg) { $c.Add_MouseDown({ if ($_.Button -eq "Left") { [LkNative]::Drag($f) } }) }
 function BoutonTitre($txt, $x, $survol, $taille = 16) {
-  $b = Icone $titreBar $txt $x 0 44 56 $taille $cGris $cTitre
+  $b = Icone $titreBar $txt $x 0 44 56 $taille $cGris $cFond
   $b.Cursor = "Hand"; $b.Tag = $survol
-  $b.Add_MouseEnter({ $this.BackColor = $this.Tag; $this.ForeColor = $cBlanc }); $b.Add_MouseLeave({ $this.BackColor = $cTitre; $this.ForeColor = $cGris })
+  $b.Add_MouseEnter({ $this.BackColor = $this.Tag; $this.ForeColor = $cBlanc }); $b.Add_MouseLeave({ $this.BackColor = $cFond; $this.ForeColor = $cGris })
   return $b
 }
 $bFermer = BoutonTitre "x" 956 (Hex "#c4283c") 15
 $bMini   = BoutonTitre "minus" 912 $cBoutonTitre 15
 $bTheme  = BoutonTitre "theme" 868 $cBoutonTitre 17
-foreach ($bt in $bFermer, $bMini, $bTheme) { $bt.BringToFront() }   # toujours au-dessus des onglets
-$traitTitre.BringToFront()
+foreach ($bt in $bFermer, $bMini, $bTheme) { $bt.BringToFront() }
 $tip.SetToolTip($bFermer, (T "Fermer")); $tip.SetToolTip($bMini, (T "Réduire")); $tip.SetToolTip($bTheme, (T "Thème clair / sombre"))
 $bFermer.Add_Click({ $f.Close() })
 $bMini.Add_Click({ $f.WindowState = "Minimized" })
@@ -1035,49 +1448,49 @@ $bMini.Add_Click({ $f.WindowState = "Minimized" })
 # Sections (onglets) et leurs sous-pages (pastilles en haut de la zone)
 $groupes = [ordered]@{
   accueil     = @{ Nom = "Tableau de bord"; Pages = @("accueil") }
-  performance = @{ Nom = "Performance"; Pages = @("perf") }
+  performance = @{ Nom = "Performance"; Pages = @("perf", "session") }
   nettoyage   = @{ Nom = "Nettoyage"; Pages = @("nettoyage") }
   applis      = @{ Nom = "Applications"; Pages = @("applis") }
-  systeme     = @{ Nom = "Système"; Pages = @("demarrage", "reseau", "sysoutils") }
+  systeme     = @{ Nom = "Système"; Pages = @("demarrage", "reseau", "espace", "sysoutils") }
   materiel    = @{ Nom = "Matériel"; Pages = @("infos", "pilotes", "sante", "bios") }
   journal     = @{ Nom = "Journal"; Pages = @("journal") }
   parametres  = @{ Nom = "Paramètres"; Pages = @("parametres") }
 }
 $groupeDe = @{}; $derniere = @{}
 foreach ($g in $groupes.Keys) { foreach ($pg in $groupes[$g].Pages) { $groupeDe[$pg] = $g }; $derniere[$g] = $groupes[$g].Pages[0] }
-$nomsSousPages = @{ infos = "Mon PC"; demarrage = "Démarrage"; reseau = "Réseau"; sysoutils = "Réparation et sécurité"; pilotes = "Pilotes"; sante = "Santé"; bios = "BIOS" }
+$nomsSousPages = @{ perf = "Réglages"; session = "Session de jeu"; espace = "Espace disque"; infos = "Mon PC"; demarrage = "Démarrage"; reseau = "Réseau"; sysoutils = "Réparation et sécurité"; pilotes = "Pilotes"; sante = "Santé"; bios = "BIOS" }
 
-# Onglets texte : largeur mesurée (en gras pour ne pas bouger quand l'onglet devient actif)
-$fTab = Police 13.5; $fTabActif = Police 13.5 "Bold"
-$onglets = @{}
-$xTab = $(if ($bBeta) { [math]::Max(160, [math]::Ceiling(($bBeta.Right / $sc) + 10)) } else { 160 }); $placeTabs = 824 - $xTab
-$nomsTabs = @($groupes.Keys | Where-Object { $_ -ne "parametres" })
-$largeurs = @{}; $total = 0
-foreach ($taille in 13.5, 12.5, 11.5) {
-  $fTab = Police $taille; $fTabActif = Police $taille "Bold"; $total = 0
-  foreach ($g in $nomsTabs) { $largeurs[$g] = [math]::Ceiling((Largeur (T $groupes[$g].Nom) $fTabActif) / $sc); $total += $largeurs[$g] }
-  if ($total + 8 * $nomsTabs.Count -le $placeTabs) { break }
+# v5.8 : navigation de la barre latérale (une entrée par section + raccourci « Session de jeu »)
+$fNav = Police 13.5 "Bold"; $fNavActif = Police 13.5 "Bold"
+$onglets = [ordered]@{}
+function Element-Nav($cle, $icone, $texte, $y) {
+  $n = New-Object LkNav; $n.Text = (T $texte); $n.Icon = $icone; $n.Font = $fNav; $n.ActiveFont = $fNavActif; $n.IconSize = [float](19 * $sc); $n.Radius = S 10
+  $n.Location = Pt 12 $y; $n.Size = Sz 208 40; $n.ForeColor = $cGris; $n.ActiveFore = $cBlanc; $n.HoverFill = $cNavSurvol; $n.ActiveFill = $cNavActif; $n.Tag = $cle
+  $n.Add_Click({ if ($this.Tag -eq "session") { Afficher "session" } else { Afficher-Groupe $this.Tag } })
+  $nav.Controls.Add($n); $script:onglets[$cle] = $n
 }
-$pad = [math]::Max(3, [math]::Min(14, [math]::Floor(($placeTabs - $total) / (2 * $nomsTabs.Count))))
-function Onglet($g, $x, $w, $texte, $font, $icone = $null) {
-  if ($icone) { $l = Icone $titreBar $icone $x 0 $w 56 19 $cGris $cTitre; $tip.SetToolTip($l, (T "Paramètres")) }
-  else { $l = Lbl $titreBar $texte $x 0 $w 56 $font $cGris $cTitre; $l.TextAlign = "MiddleCenter" }
-  $l.Cursor = "Hand"; $l.Tag = $g
-  $l.Add_Click({ Afficher-Groupe $this.Tag })
-  $l.Add_MouseEnter({ if ($this.Tag -ne $script:groupeActif) { $this.ForeColor = $cBlanc } })
-  $l.Add_MouseLeave({ if ($this.Tag -ne $script:groupeActif) { $this.ForeColor = $cGris } })
-  $script:onglets[$g] = $l
-}
-foreach ($g in $nomsTabs) { $w = $largeurs[$g] + 2 * $pad; Onglet $g $xTab $w $groupes[$g].Nom $fTab; $xTab += $w }
-# Paramètres : roue dentée à droite
-Onglet "parametres" ([math]::Max(824, $xTab)) 44 "" $null "settings"
-# Soulignement violet qui glisse vers l'onglet actif
-$souligne = New-Object LkIndicator; $souligne.Fill = $cAccentClair; $souligne.Size = Sz 40 2; $souligne.Location = Pt 160 53
-$titreBar.Controls.Add($souligne); $souligne.BringToFront()
+$defNav = @(
+  @("accueil", "home", "Accueil"), @("performance", "zap", "Performance"), @("session", "gamepad", "Session de jeu"),
+  @("nettoyage", "sparkles", "Nettoyage"), @("applis", "grid", "Applications"), @("systeme", "sliders", "Système"),
+  @("materiel", "cpu", "Matériel"), @("journal", "list", "Journal")
+)
+$yNav = 124
+foreach ($d in $defNav) { Element-Nav $d[0] $d[1] $d[2] $yNav; $yNav += 42 }
+# Encadré « Tout est annulable »
+$boiteAnn = New-Object LkCard; $boiteAnn.Fill = $cCarte; $boiteAnn.Radius = S 12; $boiteAnn.Location = Pt 12 474; $boiteAnn.Size = Sz 208 112
+[void](Lbl $boiteAnn "Tout est annulable" 14 11 180 20 (Police 12.5 "Bold") $cBlanc $cCarte)
+[void](Lbl $boiteAnn "Point de restauration + sauvegarde avant chaque changement." 14 32 184 34 (Police 11) $cGris $cCarte)
+$bAnnNav = New-Object LkButton; $bAnnNav.Text = (T "Tout annuler"); $bAnnNav.Icon = "undo"; $bAnnNav.Font = Police 12 "Bold"; $bAnnNav.Radius = S 9
+$bAnnNav.Location = Pt 12 70; $bAnnNav.Size = Sz 184 32; $bAnnNav.Fill = $cCarteSurvol; $bAnnNav.HoverFill = $cNavActif; $bAnnNav.ForeColor = $cBlanc
+$bAnnNav.Add_Click({ Tout-Annuler })
+$boiteAnn.Controls.Add($bAnnNav); $nav.Controls.Add($boiteAnn)
+$tip.SetToolTip($bAnnNav, (T "Remet les réglages modifiés par LuKZyR à leur valeur d'origine."))
+Element-Nav "parametres" "settings" "Paramètres" 598
+$souligne = New-Object LkIndicator; $souligne.Visible = $false   # v5.8 : plus de soulignement d'onglet
 
 # --- Zone principale ---
 $main = New-Object LkPanel
-$main.Location = Pt 0 56; $main.Size = Sz 1000 604; $main.BackColor = $cFond
+$main.Location = Pt $largeurNav 56; $main.Size = Sz 1000 604; $main.BackColor = $cFond
 $f.Controls.Add($main)
 $h1  = Lbl $main "" 32 18 600 32 (Police 22 "Bold") $cBlanc $cFond
 $sub = Lbl $main "" 33 52 650 20 (Police 13) $cGris $cFond
@@ -1106,7 +1519,7 @@ $pages = [ordered]@{}
 $toggles = New-Object System.Collections.ArrayList
 function NouvellePage($nom, $titre, $sousTitre, [switch]$Defile, $Construire = $null) {
   $multi = $groupes[$groupeDe[$nom]].Pages.Count -gt 1
-  if ($Defile) { $p = New-Object LkScroll; $p.Bar = S 8; $p.Thumb = $cPouce } else { $p = New-Object LkPanel }
+  if ($Defile) { $p = New-Object LkScroll; $p.Bar = S 8; $p.Thumb = $cPouce; $p.Step = S 72 } else { $p = New-Object LkPanel }
   if ($multi) { $p.Location = Pt 0 44; $p.Size = Sz 936 412 } else { $p.Location = Pt 0 0; $p.Size = $zone.ClientSize }
   $p.BackColor = $cFond; $p.Visible = $false
   $zone.Controls.Add($p)
@@ -1117,16 +1530,12 @@ function Afficher-Groupe($g) { Afficher $derniere[$g] }
 # v5.1 : l'onglet actif (gras + soulignement) est mis à jour TOUT DE SUITE et la barre redessinée
 # immédiatement, avant de construire la page : il ne dépend plus de la fin d'une animation.
 function Maj-Onglets($g, [bool]$anime) {
-  foreach ($k in $onglets.Keys) {
-    $o = $onglets[$k]; $actif = ($k -eq $g)
-    $o.ForeColor = if ($actif) { $cTexteActif } else { $cGris }
-    if ($k -ne "parametres") { $o.Font = if ($actif) { $fTabActif } else { $fTab } } elseif ($actif) { $o.ForeColor = $cAccentClair }
-  }
-  $o = $onglets[$g]; $wS = [math]::Max((S 18), $o.Width - 2 * (S $pad))
-  if ($g -eq "parametres") { $wS = S 22 }
-  $xS = $o.Left + [int](($o.Width - $wS) / 2)
-  [LkAnim]::PlaceXW($souligne, $xS, $wS, $(if ($anime) { 200 } else { 0 }))
-  $titreBar.Update()
+  # v5.8 : entrée active de la barre latérale + fil d'Ariane (« Système › Espace disque »)
+  $cle = if ($script:pageActive -eq "session") { "session" } else { $g }
+  foreach ($k in $onglets.Keys) { $onglets[$k].Active = ($k -eq $cle) }
+  $pa = $script:pageActive
+  $lFil.Text = if ($g -eq "accueil") { "" } else { (T $groupes[$g].Nom) + $(if ($groupes[$g].Pages.Count -gt 1 -and $nomsSousPages[$pa]) { "  ›  " + (T $nomsSousPages[$pa]) } else { "" }) }
+  $nav.Update()
 }
 function Afficher($nom, [switch]$Forcer) {
   if ($tip) { $tip.Active = $false; $tip.Active = $true }   # v5.1 : pas de bulle d'aide oubliée d'une autre page
@@ -1140,43 +1549,46 @@ function Afficher($nom, [switch]$Forcer) {
   $accueil = ($nom -eq "accueil")
   # Pages lues sur le système : construites au 1er affichage (la lecture longue se fait en arrière-plan)
   if ($info.Construire -and -not $info.Construite) { $info.Construite = $true; try { & $info.Construire } catch { Log "Erreur page $nom : $($_.Exception.Message)" } }
+  if ($nom -eq "session") { try { Maj-Session } catch { Log "Session de jeu : $($_.Exception.Message)" } }
   if ($nom -eq "perf" -and -not $script:verifsLancees) { $script:verifsLancees = $true; try { Lancer-Verifs } catch { Log "Vérifications : $($_.Exception.Message)" } }
   $anime = [LkAnim]::On -and $ancienne -and $ancienne -ne $nom -and $f.Visible
+  [LkFade]::StopAll(); $script:fondu = $null
   $gel = $f.Visible -and $main.IsHandleCreated
   if ($gel) { [LkNative]::Redraw($main, $false) }
   try {
     $main.SuspendLayout()
-    foreach ($c in $h1, $sub, $zone, $barreBas, $rech) { if ($c) { $c.Visible = -not $accueil } }
+    foreach ($c in $h1, $sub, $zone, $barreBas) { if ($c) { $c.Visible = -not $accueil } }
     if ($script:listeRech) { $script:listeRech.Visible = $false }
-    if ($accueil) { $nouv.Left = $(if ($anime) { S 12 } else { 0 }); $nouv.Visible = $true; $nouv.BringToFront() }
+    if ($accueil) { $nouv.Left = 0; $nouv.Visible = $true; $nouv.BringToFront() }
     else {
       $pages["accueil"].Panel.Visible = $false
       foreach ($k in $barresPastilles.Keys) { $barresPastilles[$k].Visible = ($k -eq $g) }
       if ($barresPastilles.ContainsKey($g)) {
         foreach ($pg in $groupes[$g].Pages) {
           $b = $pastilles[$pg]
-          if ($pg -eq $nom) { $b.Fill = $cAccent; $b.HoverFill = Hex "#7a40ee"; $b.ForeColor = [Drawing.Color]::White } else { $b.Fill = $cFond; $b.HoverFill = $cCarteSurvol; $b.ForeColor = $cGris }
+          if ($pg -eq $nom) { $b.Fill = $cAccent; $b.Fill2 = $cAccent2; $b.HoverFill = Hex "#7a40ee"; $b.ForeColor = [Drawing.Color]::White } else { $b.Fill = $cFond; $b.Fill2 = [Drawing.Color]::Empty; $b.HoverFill = $cCarteSurvol; $b.ForeColor = $cGris }
           $b.Invalidate()
         }
       }
-      $nouv.Left = $(if ($anime) { S 12 } else { 0 }); $nouv.Visible = $true; $nouv.BringToFront()
+      $nouv.Left = 0; $nouv.Visible = $true; $nouv.BringToFront()
       foreach ($k in @($pages.Keys)) { if ($k -ne $nom -and $k -ne "accueil") { $pages[$k].Panel.Visible = $false; $pages[$k].Panel.Left = 0 } }
       $h1.Text = (T $info.Titre); $sub.Text = (T $info.Sous)
     }
     $banniere.Visible = $script:banniereOn -and -not $accueil
-    if ($rech -and -not $accueil) { $rech.BringToFront() }
     $main.ResumeLayout()
+    # v5.7 : la page est « photographiée » pendant que le dessin est gelé : la 1re image affichée est déjà celle de l'animation
+    if ($anime) { try { $fd = [LkFade]::Get($nouv.Parent); if ($fd.Prepare($nouv, $cFond, (S 10))) { $script:fondu = $fd } } catch {} }
   } finally {
     if ($gel) { [LkNative]::Redraw($main, $true) }
   }
   # Le titre reste lisible pendant le fondu (il part du gris, jamais de la couleur du fond)
   $h1.ForeColor = $cBlanc; $sub.ForeColor = $cGris
   if ($anime) {
-    [LkAnim]::SlideIn($nouv, (S 12), 200)
-    $contenu = if ($nouv -is [LkScroll]) { $nouv.Content } else { $nouv }
-    [LkAnim]::Stagger($contenu, (S 10), 260, 30, 12)
+    if ($script:fondu) { $script:fondu.Play(230, 26) }
     if (-not $accueil) { [LkAnim]::FadeFore($h1, $cGris, $cBlanc, 200) }
   }
+  $script:pageVueA = Get-Date
+  try { Maj-Moniteur } catch {}
 }
 
 # Badges : SÛR (gris) / NON RÉVERSIBLE (gris, cadenas) / AVANCÉ (orange) / DÉFINITIF (rouge)
@@ -1187,6 +1599,9 @@ $badges = @{
   n = @{ Texte = "NON RÉVERSIBLE"; Clair = "#9a9aae"; Fonce = "#6b6b80"; Icone = "lock" }
   a = @{ Texte = "AVANCÉ"; Clair = "#f5a524"; Fonce = "#c2410c"; Icone = "alert" }
   d = @{ Texte = "DÉFINITIF"; Clair = "#f87171"; Fonce = "#dc2626"; Icone = "lock" }
+  hi = @{ Texte = "IMPACT ÉLEVÉ"; Clair = "#f5a524"; Fonce = "#c2410c"; Icone = "zap" }
+  mo = @{ Texte = "IMPACT MOYEN"; Clair = "#a78bfa"; Fonce = "#6d28d9"; Icone = "gauge" }
+  lo = @{ Texte = "IMPACT FAIBLE"; Clair = "#9a9aae"; Fonce = "#6b6b80"; Icone = "check" }
 }
 $fBadge = Police 9.5 "Bold"
 $aidesBadge = @{
@@ -1194,6 +1609,9 @@ $aidesBadge = @{
   n = "NON RÉVERSIBLE : sans risque pour Windows, mais « Tout annuler » ne peut pas le défaire (applis supprimées ou installées, fichiers effacés)."
   a = "AVANCÉ : réversible, mais change un comportement important de Windows. Lis bien la description."
   d = "DÉFINITIF : ne peut pas être annulé par « Tout annuler » (seulement par un point de restauration)."
+  hi = "Impact estimé ÉLEVÉ : appli connue pour ralentir l'ouverture de session (launcher, synchro, logiciel RGB...). La désactiver ne la désinstalle pas."
+  mo = "Impact estimé MOYEN : programme assez lourd lancé avec Windows."
+  lo = "Impact estimé FAIBLE : petit programme, peu de différence au démarrage."
 }
 function Badge($parent, $type, $x, $y) {
   $bd = New-Object LkBadge; $bd.Text = (T $badges[$type].Texte); $bd.Font = $fBadge; $bd.Radius = S 5
@@ -1247,16 +1665,19 @@ function Confirmer-Risque($sw) {
 }
 # Grille 2 colonnes : titres de section + cartes d'option
 function Grille($page) { @{ Page = $page; Y = 0; Col = 0; H = 0 } }
-function G-Fin($g) { if ($g.Col -eq 1) { $g.Y += $g.H + 10; $g.Col = 0 } }
-function G-Section($g, $texte) { G-Fin $g; if ($g.Y -gt 0) { $g.Y += 4 }; Section $g.Page $g.Y $texte; $g.Y += 30 }
+function G-Fin($g) { if ($g.Col -eq 1) { $g.Y += $g.H + 8; $g.Col = 0 } }
+function G-Section($g, $texte) { G-Fin $g; if ($g.Y -gt 0) { $g.Y += 12 }; Section $g.Page $g.Y $texte; $g.Y += 32 }
 function G-Option($g, $titre, $desc, $badge, $actif, $cle, $couleur = $null) {
-  $x = if ($g.Col) { 465 } else { 0 }
-  $sw = Ligne $g.Page $g.Y $titre $desc $actif $couleur $cle -X $x -W 455 -Badge $badge
+  $x = if ($g.Col) { 464 } else { 0 }
+  $sw = Ligne $g.Page $g.Y $titre $desc $actif $couleur $cle -X $x -W 456 -Badge $badge
   $g.H = 76
-  if ($g.Col) { $g.Col = 0; $g.Y += 86 } else { $g.Col = 1 }
+  if ($g.Col) { $g.Col = 0; $g.Y += 84 } else { $g.Col = 1 }
   return $sw
 }
-function Section($page, $y, $texte) { [void](Lbl $page $texte 4 ($y + 6) 800 18 (Police 10.5 "Bold") $cGris $cFond) }
+function Section($page, $y, $texte) {
+  $s = New-Object LkSection; $s.Text = (T $texte); $s.Font = Police 10.5 "Bold"; $s.ForeColor = $cGris; $s.BackColor = $cFond; $s.Line = $cPiste2
+  $s.Location = Pt 2 ($y + 4); $s.Size = Sz 918 20; $page.Controls.Add($s); $script:derniereSection = $s
+}
 # Carte-action : icône + titre + description (+ contrôle à droite), cliquable
 function Survol-Carte($el) {
   $el.Add_MouseEnter({ $cd = $this; while ($cd -and -not ($cd -is [LkCard])) { $cd = $cd.Parent }; if ($cd) { $cd.SetHover($true) } })
@@ -1266,7 +1687,7 @@ function LigneOption($page, $y, $glyphe, $titre, $desc, $couleurIcone = $null, $
   $c = New-Object LkCard; $c.Fill = $cCarte; $c.HoverFill = $cCarteSurvol; $c.Radius = S 12
   $c.Location = Pt $X $y; $c.Size = Sz $W 62; $c.Cursor = "Hand"
   $colI = if ($couleurIcone) { $couleurIcone } else { $cAccentClair }
-  $ic = Icone $c ([string][char]$glyphe) 13 14 34 34 19 $colI $cCarte -Puce $colI
+  $ic = Icone $c $(if ($glyphe -is [string]) { $glyphe } else { [string][char]$glyphe }) 13 14 34 34 19 $colI $cCarte -Puce $colI
   $fT = Police 14 "Bold"; $wT = [math]::Min(($W - 260), [math]::Ceiling((Largeur (T $titre) $fT) / $sc) + 4)
   $t = Lbl $c $titre 56 11 $wT 22 $fT $cBlanc $cCarte
   $d = Lbl $c $desc 56 33 ($W - 250) 18 (Police 12) $cGris $cCarte
@@ -1322,12 +1743,12 @@ function Ouvrir-Dossier($chemin) {
 function Bouton($parent, $texte, $x, $y, $w, $h, [switch]$Principal, $Couleur = $null) {
   $b = New-Object LkButton; $b.Text = (T $texte); $b.Font = Police 12 "Bold"; $b.Radius = S 10; $b.Location = Pt $x $y; $b.Size = Sz $w $h
   if ($Couleur) { $b.Fill = $Couleur; $b.HoverFill = [LkAnim]::Mix($Couleur, [Drawing.Color]::Black, 0.12) }
-  elseif ($Principal) { $b.Fill = $cAccent; $b.HoverFill = Hex "#7a40ee" } else { $b.Fill = $cCarteSurvol; $b.HoverFill = $cNavActif; $b.ForeColor = $cBlanc }
+  elseif ($Principal) { $b.Fill = $cAccent; $b.Fill2 = $cAccent2; $b.HoverFill = Hex "#7a40ee" } else { $b.Fill = $cCarteSurvol; $b.HoverFill = $cNavActif; $b.ForeColor = $cBlanc }
   $parent.Controls.Add($b); $b.BringToFront(); return $b   # v5.3 : jamais caché sous un texte de la carte
 }
 
 # ===================== MATÉRIEL > MON PC =====================
-$pInfos = NouvellePage "infos" "Matériel" "Composants détectés sur ce PC."
+$pInfos = NouvellePage "infos" "Matériel" "Composants détectés sur ce PC." -Defile
 $osNom = ("$($os.Caption)" -replace '^Microsoft\s+','').Trim()
 $infos = @(
   @("PROCESSEUR", $cpuNom),
@@ -1340,21 +1761,135 @@ $infos = @(
 $iconesInfos = @("cpu", "monitor", "plug", "memory", "drive", "shield-check")
 for ($i = 0; $i -lt $infos.Count; $i++) {
   $c = New-Object LkCard; $c.Fill = $cCarte; $c.Radius = S 12
-  $c.Location = Pt (($i % 2) * 468) ([math]::Floor($i / 2) * 124); $c.Size = Sz 458 114
+  $c.Location = Pt (($i % 2) * 464) ([math]::Floor($i / 2) * 122); $c.Size = Sz 456 114
   [void](Lbl $c $infos[$i][0] 18 14 400 16 (Police 10.5 "Bold") $cAccentClair $cCarte)
   [void](Lbl $c $infos[$i][1] 18 36 380 70 (Police 13 "Bold") $cBlanc $cCarte)
-  [void](Icone $c $iconesInfos[$i] 406 14 36 36 19 $cAccentClair $cCarte -Puce $cAccent)
+  [void](Icone $c $iconesInfos[$i] 402 14 36 36 19 $cAccentClair $cCarte -Puce $cAccent)
   $pInfos.Controls.Add($c)
 }
+# v5.7 : rapport système (lecture seule, fichier sur le Bureau)
+$yInfos = [math]::Ceiling($infos.Count / 2) * 122 + 12
+Section $pInfos $yInfos "RAPPORT"; $yInfos += 32
+$oRap = LigneOption $pInfos $yInfos "file-text" "Rapport système" "Matériel, pilotes, Windows et réglages appliqués dans un fichier HTML + texte sur le Bureau. Rien n'est envoyé."
+$bRap = Bouton $oRap.Carte "Exporter" 756 13 148 36 -Principal; $bRap.Icon = "download"
+$bRap.Add_Click({ Exporter-Rapport })
+foreach ($el in $oRap.Elements) { $el.Add_Click({ Exporter-Rapport }) }
 
 # ===================== MATÉRIEL > PILOTES =====================
 $pP = NouvellePage "pilotes" "Pilotes" "Pilotes officiels des fabricants de tes composants." -Defile
 $y = 0
+# v5.7 : version et âge du pilote graphique INSTALLÉ (lecture seule) + lien vers la page officielle
+function Info-PiloteGpu($g) {
+  $r = @{ Version = "$($g.DriverVersion)"; Date = $null; Age = -1; Logiciel = "" }
+  try { $d = $g.DriverDate; if ($d -is [datetime]) { $r.Date = $d } elseif ("$d" -match '^(\d{8})') { $r.Date = [datetime]::ParseExact($matches[1], "yyyyMMdd", $null) } } catch {}
+  if ($r.Date) { $r.Age = [int]((Get-Date) - $r.Date).TotalDays }
+  try {
+    foreach ($k in @(Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\d{4}$' })) {
+      $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
+      if ("$($p.DriverDesc)" -ne "$($g.Name)") { continue }
+      if ($p.RadeonSoftwareVersion) { $r.Logiciel = "AMD Software Adrenalin $($p.RadeonSoftwareVersion)" }
+      break
+    }
+  } catch {}
+  return $r
+}
+$script:infosPilotes = @()
+foreach ($g in $gpus) {
+  if (-not $g.DriverVersion) { continue }
+  $ip = Info-PiloteGpu $g; $ip.Nom = "$($g.Name)"; $script:infosPilotes += $ip
+  $c = New-Object LkCard; $c.Fill = $cCarte; $c.Radius = S 12; $c.Location = Pt 0 $y; $c.Size = Sz 920 84
+  [void](Icone $c "monitor" 13 22 40 40 20 $cAccentClair $cCarte -Puce $cAccent)
+  [void](Lbl $c ((T "Pilote graphique installé") + " · $($g.Name)") 66 10 660 22 (Police 14 "Bold") $cBlanc $cCarte)
+  $l2 = (T "Version") + " $($ip.Version)" + $(if ($ip.Date) { " · " + ((T "du {0}") -f $ip.Date.ToString("dd/MM/yyyy")) + " (" + ((T "il y a {0} jours") -f $ip.Age) + ")" } else { "" }) + $(if ($ip.Logiciel) { " · $($ip.Logiciel)" } else { "" })
+  $lb2 = Lbl $c $l2 66 33 660 18 (Police 12) $cGris $cCarte; $lb2.AutoEllipsis = $true
+  if ($ip.Age -gt 180) { $txt3 = "Pilote de plus de 6 mois : une version plus récente existe sûrement. Vérifie sur le site officiel."; $col3 = $cOrange }
+  elseif ($ip.Age -ge 0) { $txt3 = "Pilote récent : rien à faire."; $col3 = $cVert } else { $txt3 = "Date du pilote inconnue."; $col3 = $cGris }
+  [void](Lbl $c $txt3 66 54 660 18 (Police 12 "Bold") $col3 $cCarte)
+  $url = switch (Gpu-Marque $g) { "NVIDIA" { "https://www.nvidia.com/fr-fr/drivers/" } "AMD" { "https://www.amd.com/fr/support/download/drivers.html" } "Intel" { "https://www.intel.com/content/www/fr/fr/support/detect.html" } default { $null } }
+  if ($url) {
+    $bS = Bouton $c "Site officiel" 740 22 164 40; $bS.Icon = "globe"; $bS.Tag = $url
+    $bS.Add_Click({ try { Start-Process $this.Tag; Log ((T "Ouverture") + " : $($this.Tag)") } catch {} })
+  }
+  $pP.Controls.Add($c); $y += 92
+}
+if ($y) { $y += 4; Section $pP $y "PAGES OFFICIELLES DES FABRICANTS"; $y += 32 }
 foreach ($pi in $pilotes) {
   $sw = Ligne $pP $y $pi.Nom $pi.Desc $false $null "pilote" -Badge "n"
   $sw.Tag.Pilote = $pi; $y += 86
 }
 if (-not $pilotes.Count) { [void](Lbl $pP "Aucun pilote spécifique détecté sur ce PC." 2 0 600 20 (Police 13) $cGris $cFond) }
+
+# ===================== RAPPORT SYSTÈME (v5.7, lecture seule) =====================
+# Fichier HTML (lisible, à envoyer pour avoir de l'aide) + même contenu en texte, sur le Bureau.
+# Ne contient ni mot de passe, ni clé de licence, ni fichier personnel.
+function Encoder-Html($s) { [Net.WebUtility]::HtmlEncode("$s") }
+function Exporter-Rapport {
+  try {
+    $S = [ordered]@{}
+    $S["LuKZyR Optimisation"] = @(@((T "Version"), "$(Version-Affichee) (build $VersionInterne)"), @((T "Date du rapport"), (Get-Date -Format "dd/MM/yyyy HH:mm")), @((T "Nom du PC"), $env:COMPUTERNAME))
+    $S[(T "Processeur")] = @(@((T "Modèle"), $cpuNom), @((T "Cœurs / threads"), "$($cpu.NumberOfCores) / $($cpu.NumberOfLogicalProcessors)"), @((T "Fréquence de base"), "$($cpu.MaxClockSpeed) MHz"))
+    $lg = @()
+    foreach ($g in $gpus) {
+      $ip = $script:infosPilotes | Where-Object { $_.Nom -eq "$($g.Name)" } | Select-Object -First 1
+      $lg += , @("$($g.Name)", ($(if ($g.VramGo) { "$($g.VramGo) $uGo · " } else { "" }) + (T "pilote") + " $($g.DriverVersion)" + $(if ($ip.Date) { " (" + $ip.Date.ToString("dd/MM/yyyy") + ")" } else { "" }) + $(if ($ip.Logiciel) { " · $($ip.Logiciel)" } else { "" })))
+    }
+    if (-not $lg.Count) { $lg += , @((T "Carte graphique"), (T "Non détectée")) }
+    $S[(T "Carte graphique")] = $lg
+    $S[(T "Carte mère et BIOS")] = @(@((T "Modèle"), "$cmMarque $cmModele".Trim()), @("BIOS", "$($bios.SMBIOSBIOSVersion)" + $(if ($bios.ReleaseDate) { " (" + ([datetime]$bios.ReleaseDate).ToString("dd/MM/yyyy") + ")" } else { "" })))
+    $lm = @(, @((T "Total"), ("$ramGo $uGo $ramType".Trim() + $(if ($ramMhz) { " · $ramMhz MHz" } else { "" }))))
+    foreach ($m in $mems) { $lm += , @("$($m.DeviceLocator)", ("$([math]::Round([double]$m.Capacity / 1GB)) $uGo · $("$($m.Manufacturer)".Trim()) $("$($m.PartNumber)".Trim()) · $($m.ConfiguredClockSpeed) MHz")) }
+    $S[(T "Mémoire")] = $lm
+    $ld = @()
+    foreach ($d in $disks) { $ld += , @("$($d.FriendlyName)", ("$([math]::Round($d.Size / 1GB)) $uGo · $($d.MediaType) · $($d.BusType) · " + (T "état") + " : $($d.HealthStatus)")) }
+    foreach ($v in @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq "Fixed" -and $_.IsReady })) { $ld += , @("$($v.Name)", ((Taille-Txt $v.AvailableFreeSpace) + " " + (T "libres sur") + " " + (Taille-Txt $v.TotalSize) + " · $($v.DriveFormat)")) }
+    $S[(T "Stockage")] = $ld
+    $cv = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue
+    $boot = $null; try { $boot = [datetime]$os.LastBootUpTime } catch {}
+    $S["Windows"] = @(@((T "Édition"), "$osNom $osVer".Trim()), @("Build", "$($cv.CurrentBuild).$($cv.UBR)"), @((T "Démarré le"), $(if ($boot) { $boot.ToString("dd/MM/yyyy HH:mm") } else { "-" })), @((T "Type"), $(if ($portable) { T "PC portable" } else { T "PC fixe" })))
+    $fr = $null; try { $fr = [LkNative]::Frequences() } catch {}
+    $ecr = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $planTxt = "$(& powercfg.exe /getactivescheme 2>$null)"; if ($planTxt -match '\((.+)\)\s*$') { $planTxt = $matches[1] }
+    $S[(T "Écran et alimentation")] = @(@((T "Écran principal"), ("$($ecr.Width) x $($ecr.Height)" + $(if ($fr -and $fr[0] -gt 1) { " · $($fr[0]) Hz (" + (T "max") + " $($fr[1]) Hz)" } else { "" }))), @((T "Plan d'alimentation"), $planTxt))
+    $tc = if ($script:tempsLhm.Cpu) { "$($script:tempsLhm.Cpu) °C" } elseif ([LkMonitor]::Temp -gt 0) { "$([LkMonitor]::Temp) °C" } else { T "non lue (ouvre LibreHardwareMonitor pour l'avoir)" }
+    $S[(T "Températures")] = @(@("CPU", $tc), @("GPU", $(if ($script:tempsLhm.Gpu) { "$($script:tempsLhm.Gpu) °C" } else { "-" })))
+    $lr = @(); $res = @(); try { $res = @(Resume-Sauvegarde) } catch {}
+    $der = "$((Get-ItemProperty -Path $cleConfig -Name DerniereOptimisation -ErrorAction Ignore).DerniereOptimisation)"
+    $lr += , @((T "Dernière optimisation"), $(if ($der) { $der } else { T "jamais" }))
+    $lr += , @((T "Réglages annulables"), "$($res.Count)")
+    foreach ($x in ($res | Select-Object -First 60)) { $lr += , @("•", "$x") }
+    $S[(T "Réglages appliqués par LuKZyR")] = $lr
+    $ldm = @()
+    if ($script:demarrage) { foreach ($el in $script:demarrage) { $ldm += , @("$($el.Nom)", ($(if ($el.Actif) { T "actif" } else { T "désactivé" }) + " · " + (T "impact") + " " + (T "$($el.Impact)"))) } }
+    else { $ldm += , @("-", (T "Ouvre Système > Démarrage une fois pour l'ajouter au rapport.")) }
+    $S[(T "Applis au démarrage")] = $ldm
+    $S[(T "Session de jeu")] = @(, @((T "État"), $(if (Session-Active) { T "en cours" } else { T "aucune" })))
+
+    $nom = "LuKZyR-rapport-" + (Get-Date -Format "yyyyMMdd-HHmm")
+    $dos = if ($env:LK_TEST -or $TestAuto) { $dossierJournal } else { [Environment]::GetFolderPath("Desktop") }
+    if (-not (Test-Path -LiteralPath $dos)) { [void](New-Item -ItemType Directory -Path $dos -Force) }
+    $fHtml = Join-Path $dos "$nom.html"; $fTxt = Join-Path $dos "$nom.txt"
+    $sbT = New-Object Text.StringBuilder
+    [void]$sbT.Append("LuKZyR Optimisation - " + (T "Rapport système") + "`r`n" + ("=" * 60) + "`r`n")
+    $sbH = New-Object Text.StringBuilder
+    [void]$sbH.Append('<!DOCTYPE html><html lang="' + $script:langue + '"><head><meta charset="utf-8"><title>' + (Encoder-Html ((T "Rapport système") + " - $env:COMPUTERNAME")) + '</title><style>')
+    [void]$sbH.Append('body{margin:0;background:#0f0f14;color:#e8e8f0;font:14px "Segoe UI",Arial,sans-serif}header{padding:28px 40px;background:linear-gradient(90deg,#12e0ff22,#7c3aed33);border-bottom:1px solid #24242c}h1{margin:0;font-size:24px}h1 span{background:linear-gradient(90deg,#12e0ff,#8b5cf6);-webkit-background-clip:text;color:transparent}header p{margin:6px 0 0;color:#9a9aae}main{max-width:980px;margin:0 auto;padding:24px 40px 48px}section{background:#18181f;border:1px solid #24242c;border-radius:12px;margin:0 0 16px;padding:16px 20px}h2{margin:0 0 10px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#a78bfa}table{width:100%;border-collapse:collapse}td{padding:5px 0;border-top:1px solid #22222a;vertical-align:top}tr:first-child td{border-top:0}td:first-child{width:34%;color:#9a9aae;padding-right:16px}footer{color:#6b6b80;font-size:12px;text-align:center;padding-bottom:24px}')
+    [void]$sbH.Append('</style></head><body><header><h1><span>LuKZyR</span> ' + (Encoder-Html (T "Rapport système")) + '</h1><p>' + (Encoder-Html "$env:COMPUTERNAME · $(Get-Date -Format 'dd/MM/yyyy HH:mm') · $(Version-Affichee) (build $VersionInterne)") + '</p></header><main>')
+    foreach ($k in $S.Keys) {
+      [void]$sbT.Append("`r`n[$k]`r`n"); [void]$sbH.Append('<section><h2>' + (Encoder-Html $k) + '</h2><table>')
+      foreach ($ln in $S[$k]) { [void]$sbT.Append(("  {0,-28} {1}" -f $ln[0], $ln[1]) + "`r`n"); [void]$sbH.Append('<tr><td>' + (Encoder-Html $ln[0]) + '</td><td>' + (Encoder-Html $ln[1]) + '</td></tr>') }
+      [void]$sbH.Append('</table></section>')
+    }
+    $pied = T "Rapport en lecture seule : aucun mot de passe, aucune clé de licence, aucun fichier personnel."
+    [void]$sbT.Append("`r`n$pied`r`n"); [void]$sbH.Append('</main><footer>' + (Encoder-Html $pied) + '</footer></body></html>')
+    $u8 = New-Object Text.UTF8Encoding $true
+    [IO.File]::WriteAllText($fHtml, $sbH.ToString(), $u8); [IO.File]::WriteAllText($fTxt, $sbT.ToString(), $u8)
+    Log ((T "Rapport système exporté") + " : $fHtml (+ .txt)")
+    if (-not $env:LK_TEST -and -not $TestAuto) { try { Start-Process $fHtml } catch { Ouvrir-Dossier $dos } }
+  } catch {
+    Log ((T "Rapport système impossible") + " : $($_.Exception.Message)")
+    if (-not $env:LK_TEST) { [void](Boite ((T "Rapport système impossible") + " :`n$($_.Exception.Message)") "OK" "Error") }
+  }
+}
 
 # ===================== NETTOYAGE & CONFIDENTIALITÉ =====================
 $pN = NouvellePage "nettoyage" "Nettoyage et confidentialité" "Windows plus léger, moins de pubs et de suivi. Store, Xbox, Defender et Windows Update restent intacts." -Defile
@@ -1440,7 +1975,7 @@ if (-not $script:edgePresent) {
   foreach ($c in $sE.Parent.Controls) { if ($c -is [Windows.Forms.Label] -and $c.Text -eq (T $sE.Tag.Desc)) { $c.Text = (T "Edge n'est pas installé : rien à régler.") } }
 }
 # v5.5 : VÉRIFICATIONS (lecture seule, rien n'est modifié) + raccourcis vers le bon réglage
-G-Fin $gO; $gO.Y += 4; Section $pO $gO.Y "VÉRIFICATIONS (RIEN N'EST MODIFIÉ)"; $gO.Y += 30
+G-Fin $gO; $gO.Y += 12; Section $pO $gO.Y "VÉRIFICATIONS (RIEN N'EST MODIFIÉ)"; $gO.Y += 32
 $script:verifs = [ordered]@{}
 function Ligne-Verif($cle, $glyphe, $titre, $desc, $bouton, $action) {
   $o = LigneOption $pO $gO.Y $glyphe $titre $desc
@@ -1462,6 +1997,140 @@ Ligne-Verif "anim" 0xE74D "Effets d'animation de Windows" "Lecture..." "Ouvrir" 
 # Outil Windows (pas un réglage) : Nettoyage de disque
 $oCleanmgr = LigneOption $pN $gN.Y 0xEA99 "Nettoyage de disque Windows" "Ouvre l'outil Windows pour vider la corbeille, les anciennes mises à jour, etc."
 foreach ($el in $oCleanmgr.Elements) { $el.Add_Click({ Start-Process cleanmgr }) }
+
+# ===================== PERFORMANCE > SESSION DE JEU (v5.7) =====================
+# Ferme des applis d'arrière-plan pendant qu'on joue, puis les relance. Rien n'est désinstallé, aucun
+# service ni réglage Windows n'est touché. L'état est noté dans un fichier : si le PC redémarre ou si
+# l'appli est fermée pendant la session, la fin de session est proposée au prochain lancement.
+$fichierSession = Join-Path $env:ProgramData "Lukzyr\session-jeu.json"
+$candidatsSession = @(
+  @{ Cle = "onedrive"; Nom = "OneDrive"; Desc = "Synchro des fichiers (reprend où elle en était)."; Proc = @("OneDrive"); Def = $true; Relancer = $true },
+  @{ Cle = "teams"; Nom = "Microsoft Teams"; Desc = "Messagerie Microsoft."; Proc = @("ms-teams", "Teams"); Def = $true; Relancer = $true },
+  @{ Cle = "widgets"; Nom = "Widgets Windows"; Desc = "Météo et actus (Windows le relance tout seul si besoin)."; Proc = @("Widgets", "WidgetService"); Def = $true; Relancer = $false },
+  @{ Cle = "phonelink"; Nom = "Lien avec le téléphone"; Desc = "Synchro avec ton téléphone."; Proc = @("PhoneExperienceHost"); Def = $true; Relancer = $false },
+  @{ Cle = "adobe"; Nom = "Adobe Creative Cloud"; Desc = "Mises à jour et synchro Adobe."; Proc = @("Creative Cloud", "CCXProcess", "AdobeIPCBroker", "CoreSync"); Def = $true; Relancer = $true; Principal = "Creative Cloud" },
+  @{ Cle = "spotify"; Nom = "Spotify"; Desc = "Laisse décoché si tu écoutes de la musique en jouant."; Proc = @("Spotify"); Def = $false; Relancer = $true },
+  @{ Cle = "discord"; Nom = "Discord"; Desc = "Laisse décoché si tu es en vocal."; Proc = @("Discord"); Def = $false; Relancer = $true },
+  @{ Cle = "epic"; Nom = "Epic Games Launcher"; Desc = "Ne coche pas si ton jeu passe par Epic."; Proc = @("EpicGamesLauncher"); Def = $false; Relancer = $true },
+  @{ Cle = "ea"; Nom = "EA app"; Desc = "Ne coche pas si ton jeu passe par EA."; Proc = @("EADesktop"); Def = $false; Relancer = $true },
+  @{ Cle = "ubisoft"; Nom = "Ubisoft Connect"; Desc = "Ne coche pas si ton jeu passe par Ubisoft."; Proc = @("upc", "UbisoftConnect"); Def = $false; Relancer = $true; Principal = "upc" },
+  @{ Cle = "battlenet"; Nom = "Battle.net"; Desc = "Ne coche pas si ton jeu passe par Battle.net."; Proc = @("Battle.net"); Def = $false; Relancer = $true },
+  @{ Cle = "rgb"; Nom = "Logiciels RGB (iCUE, G HUB, Razer)"; Desc = "Les lumières peuvent rester figées pendant la session."; Proc = @("iCUE", "lghub", "lghub_agent", "RazerAppEngine", "Razer Synapse 3"); Def = $false; Relancer = $true }
+)
+$sessionUi = [Diagnostics.Process]::GetCurrentProcess().SessionId
+$planHaut = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+function Plan-Actif { $o = "$(& powercfg.exe /getactivescheme 2>$null)"; if ($o -match '([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})') { return $matches[1].ToLower() }; return $null }
+function Session-Active { Test-Path -LiteralPath $fichierSession }
+function Lire-Session { try { Get-Content -LiteralPath $fichierSession -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $null } }
+function Procs-Candidat($cd) { @(Get-Process -Name $cd.Proc -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $PID -and $_.SessionId -eq $sessionUi }) }
+
+$pSe = NouvellePage "session" "Session de jeu" "Ferme les applis inutiles pendant que tu joues, puis les relance. Rien n'est désinstallé ni modifié dans Windows." -Defile
+$cSe = New-Object LkCard; $cSe.Fill = $cCarte; $cSe.Radius = S 12; $cSe.Location = Pt 0 0; $cSe.Size = Sz 920 92
+[void](Icone $cSe "gamepad" 16 22 48 48 26 $cAccentClair $cCarte -Puce $cAccent)
+$lSeT = Lbl $cSe "Aucune session en cours" 80 18 590 24 (Police 15 "Bold") $cBlanc $cCarte
+$lSeD = Lbl $cSe "Coche les applis à fermer, puis Démarrer. À la fin, tout est relancé." 80 46 590 36 (Police 12) $cGris $cCarte
+$bSe = Bouton $cSe "Démarrer la session" 690 24 214 44 -Principal; $bSe.Icon = "play"
+$pSe.Controls.Add($cSe)
+$ySe = 104
+$swSePlan = Ligne $pSe $ySe "Plan Performances élevées pendant la session" $(if ($portable) { "Désactivé sur PC portable (autonomie)." } else { "Ton plan d'alimentation actuel est remis à la fin de la session." }) (-not $portable) $null "session-plan" -Hors
+if ($portable) { $swSePlan.Checked = $false; $swSePlan.Enabled = $false }
+$ySe += 70
+Section $pSe $ySe "APPLIS À FERMER (RELANCÉES À LA FIN)"; $ySe += 32
+$choixSe = "$($prefs.SessionApps)"
+$swSession = [ordered]@{}
+foreach ($cd in $candidatsSession) {
+  $on = if ($choixSe) { @($choixSe -split ',') -contains $cd.Cle } else { [bool]$cd.Def }
+  $sw = Ligne $pSe $ySe $cd.Nom $cd.Desc $on $null "session" -Hors
+  $sw.Tag.Session = $cd; $swSession[$cd.Cle] = $sw
+  $sw.Add_CheckedChanged({ if (-not $script:silencieux) { Enregistrer-Pref "SessionApps" ((@($swSession.Keys | Where-Object { $swSession[$_].Checked }) + "-") -join ",") } })
+  $ySe += 70
+}
+[void](Lbl $pSe "Jamais fermés : Windows, l'antivirus, les pilotes, ton jeu et tout ce qui n'est pas coché. Une appli fermée perd ce qui n'était pas enregistré : enregistre avant de démarrer." 4 $ySe 900 36 (Police 11.5) $cGris $cFond)
+
+function Maj-Session {
+  $actif = Session-Active
+  if ($actif) {
+    $e = Lire-Session; $deb = $null; try { $deb = [datetime]"$($e.Debut)" } catch {}
+    $lSeT.Text = (T "Session de jeu en cours") + $(if ($deb) { " · " + ((T "depuis {0}") -f $deb.ToString("HH:mm")) } else { "" })
+    $det = @()
+    if (@($e.Apps).Count) { $det += (T "Fermées") + " : " + (@($e.Apps) -join ", ") } else { $det += T "Aucune appli fermée." }
+    if ($e.Plan) { $det += T "Plan Performances élevées actif." }
+    $lSeD.Text = ($det -join "  ·  ")
+    $bSe.Text = T "Terminer la session"; $bSe.Icon = "check"; $bSe.Fill = $cOrange; $bSe.Fill2 = [Drawing.Color]::Empty; $bSe.HoverFill = [LkAnim]::Mix($cOrange, [Drawing.Color]::Black, 0.12)
+    $rapides["session"].Text = T "Session en cours"
+  } else {
+    $lSeT.Text = T "Aucune session en cours"
+    $lSeD.Text = T "Coche les applis à fermer, puis Démarrer. À la fin, tout est relancé."
+    $bSe.Text = T "Démarrer la session"; $bSe.Icon = "play"; $bSe.Fill = $cAccent; $bSe.Fill2 = $cAccent2; $bSe.HoverFill = Hex "#7a40ee"
+    $rapides["session"].Text = T "Ferme les applis en jeu"
+  }
+  $bSe.Invalidate()
+  foreach ($sw in $swSession.Values) {
+    $cd = $sw.Tag.Session; $ouv = (Procs-Candidat $cd).Count -gt 0
+    foreach ($el in $sw.Parent.Controls) { if ($el -is [Windows.Forms.Label] -and $el.Top -gt (S 28)) { $el.Text = (T $cd.Desc) + "  ·  " + $(if ($ouv) { T "ouverte" } else { T "pas lancée" }) } }
+    $sw.Enabled = -not $actif
+  }
+  $swSePlan.Enabled = (-not $actif) -and -not $portable
+}
+function Demarrer-Session {
+  if ($script:enCours) { [void](Boite (T "Attends la fin de l'opération en cours.")); return }
+  if (Session-Active) { Terminer-Session; return }
+  $procs = @(); $relancer = @(); $noms = @()
+  foreach ($sw in $swSession.Values) {
+    if (-not $sw.Checked) { continue }
+    $cd = $sw.Tag.Session; $l = Procs-Candidat $cd
+    if (-not $l.Count) { continue }
+    $noms += (T $cd.Nom); $procs += $l
+    if ($cd.Relancer) {
+      $princ = if ($cd.Principal) { $cd.Principal } else { $null }
+      foreach ($p in $l) {
+        if ($princ -and $p.ProcessName -ne $princ) { continue }
+        $ch = $null; try { $ch = $p.Path } catch {}
+        if ($ch -and (Test-Path -LiteralPath $ch) -and $relancer -notcontains $ch) { $relancer += $ch }
+        break
+      }
+    }
+  }
+  $ancienPlan = $null
+  if ($swSePlan.Checked -and -not $portable) {
+    $actuel = Plan-Actif
+    if ($actuel -and $actuel -ne $planHaut -and "$(& powercfg.exe /list 2>$null)" -match $planHaut) { $ancienPlan = $actuel }
+  }
+  if (-not $procs.Count -and -not $ancienPlan) { [void](Boite (T "Aucune des applis cochées n'est ouverte et le plan d'alimentation est déjà le bon : rien à faire.")); Maj-Session; return }
+  # l'état est écrit AVANT de toucher à quoi que ce soit (reprise possible même après un plantage)
+  try {
+    $dosS = Split-Path $fichierSession; if (-not (Test-Path -LiteralPath $dosS)) { [void](New-Item -ItemType Directory -Path $dosS -Force) }
+    $etat = [ordered]@{ Debut = (Get-Date -Format s); Plan = $ancienPlan; Relancer = @($relancer); Apps = @($noms) }
+    [IO.File]::WriteAllText($fichierSession, ($etat | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
+  } catch { [void](Boite ((T "Session de jeu impossible") + " : $($_.Exception.Message)") "OK" "Error"); return }
+  if ($ancienPlan) { & powercfg.exe /setactive $planHaut 2>$null | Out-Null }
+  $ids = @($procs | ForEach-Object { $_.Id })
+  Log ((T "Session de jeu démarrée") + " : " + $(if ($noms.Count) { $noms -join ", " } else { T "aucune appli fermée" }) + $(if ($ancienPlan) { " · " + (T "plan Performances élevées") } else { "" }))
+  # fermeture propre (fenêtre) puis forcée après 1,5 s, en arrière-plan
+  En-Fond "session-jeu" {
+    foreach ($i in $ids) { try { $p = [Diagnostics.Process]::GetProcessById($i); if ($p.MainWindowHandle -ne [IntPtr]::Zero) { [void]$p.CloseMainWindow() } } catch {} }
+    Start-Sleep -Milliseconds 1500
+    $n = 0
+    foreach ($i in $ids) { try { $p = [Diagnostics.Process]::GetProcessById($i); if (-not $p.HasExited) { $p.Kill(); $n++ } } catch {} }
+    $n
+  } @{ ids = $ids } { param($r) Maj-Session }
+  Maj-Session
+}
+function Terminer-Session {
+  $e = Lire-Session
+  if ($e -and "$($e.Plan)" -match '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') { & powercfg.exe /setactive "$($e.Plan)" 2>$null | Out-Null }
+  $n = 0
+  foreach ($ch in @($e.Relancer)) {
+    if (-not $ch -or -not (Test-Path -LiteralPath "$ch")) { continue }
+    if (@(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension("$ch")) -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq $sessionUi }).Count) { continue }
+    # relancée par l'Explorateur : avec les droits normaux de l'utilisateur (pas en administrateur)
+    try { [void][Diagnostics.Process]::Start((Join-Path $env:WINDIR "explorer.exe"), "`"$ch`""); $n++ } catch {}
+  }
+  Remove-Item -LiteralPath $fichierSession -Force -ErrorAction SilentlyContinue
+  Log ((T "Session de jeu terminée : {0} appli(s) relancée(s)") -f $n + $(if ($e.Plan) { ", " + (T "plan d'alimentation remis") } else { "" }) + ".")
+  Maj-Session
+}
+$bSe.Add_Click({ Demarrer-Session })
 
 # Profils en un clic (Tableau de bord) : règlent les interrupteurs, modifiables ensuite
 $profils = [ordered]@{
@@ -1553,7 +2222,7 @@ function Lancer-Verifs {
   }
 }
 function Chargement($pg, $texte) {
-  $pg.Controls.Clear()
+  Vider $pg
   $l = Lbl $pg $texte 4 6 700 22 (Police 13 "Bold") $cGris $cFond
   $pb = New-Object LkBar; $pb.Location = Pt 4 36; $pb.Size = Sz 300 4; $pb.Track = $cPiste; $pb.Fill = $cAccent; $pg.Controls.Add($pb); $pb.Busy = $true
   return $l
@@ -1638,23 +2307,40 @@ function Construire-Demarrage {
   En-Fond "demarrage" $codeDemarrage (Vars-Demarrage $true) { param($r) $script:lectureDem = $false; Remplir-Demarrage $r }
 }
 function Remplir-Demarrage($r) {
-  $pg = $pDem; $pg.Controls.Clear()
+  $pg = $pDem; Geler $pages["demarrage"].Panel $true
+  try { Remplir-Demarrage2 $r } finally { Geler $pages["demarrage"].Panel $false }
+}
+function Remplir-Demarrage2($r) {
+  $pg = $pDem; Vider $pg
   if (-not $r) { [void](Lbl $pg "La liste des applis au démarrage n'a pas pu être lue (voir le Journal)." 2 0 800 20 (Police 13) $cOrange $cFond); $pages["demarrage"].Construite = $false; return }
-  $script:demarrage = @($r.Liste)
+  # v5.7 : triées par impact (élevé d'abord), badge d'impact, résumé en haut
+  $rang = @{ "élevé" = 0; "moyen" = 1; "faible" = 2 }
+  $script:demarrage = @($r.Liste | Sort-Object @{ e = { if ($_.Protege) { 3 } elseif ($rang.ContainsKey("$($_.Impact)")) { $rang["$($_.Impact)"] } else { 2 } } }, @{ e = { -not $_.Actif } }, @{ e = { "$($_.Nom)" } })
   $y = 0
   if (-not $script:demarrage.Count) { [void](Lbl $pg "Aucune appli au démarrage trouvée." 2 0 600 20 (Police 13) $cGris $cFond); $y = 30 }
+  else {
+    $nAct = @($script:demarrage | Where-Object { $_.Actif }).Count
+    $nHaut = @($script:demarrage | Where-Object { $_.Actif -and -not $_.Protege -and "$($_.Impact)" -eq "élevé" }).Count
+    $cR = New-Object LkCard; $cR.Fill = $cCarte; $cR.Radius = S 12; $cR.Location = Pt 0 0; $cR.Size = Sz 920 56
+    [void](Icone $cR $(if ($nHaut) { "zap" } else { "check-circle" }) 14 12 32 32 18 $(if ($nHaut) { $cOrange } else { $cVert }) $cCarte)
+    [void](Lbl $cR ((T "{0} applis au démarrage, {1} actives.") -f $script:demarrage.Count, $nAct) 56 8 840 20 (Police 13.5 "Bold") $cBlanc $cCarte)
+    $txtR = if ($nHaut) { (T "{0} à fort impact encore active(s) : désactive celles dont tu n'as pas besoin dès l'allumage.") -f $nHaut } else { T "Aucune appli à fort impact active : ton démarrage est propre." }
+    [void](Lbl $cR $txtR 56 29 840 18 (Police 12) $cGris $cCarte)
+    $pg.Controls.Add($cR); $y = 68
+  }
   foreach ($el in $script:demarrage) {
-    $desc = "$(if ($el.Editeur) { $el.Editeur } else { T 'Éditeur inconnu' }) · $(T 'Impact estimé') : $(T $el.Impact) · $(T $el.Ou)"
+    $bImp = switch ("$($el.Impact)") { "élevé" { "hi" } "moyen" { "mo" } default { "lo" } }
+    $desc = "$(if ($el.Editeur) { $el.Editeur } else { T 'Éditeur inconnu' }) · $(T $el.Ou)"
     if ($el.Protege) {
       # v5.6 : état RÉEL affiché (avant : toujours « actif »), mais jamais modifiable
       $sw = Ligne $pg $y $el.Nom ("$desc · " + (T "Logiciel de sécurité : non modifiable")) $el.Actif $cVert "demarrage" -Hors
       $sw.Enabled = $false
     } else {
-      $sw = Ligne $pg $y $el.Nom $desc $el.Actif $null "demarrage" -Hors
+      $sw = Ligne $pg $y $el.Nom $desc $el.Actif $null "demarrage" -Hors -Badge $bImp
       $sw.Tag.Element = $el
       $sw.Add_CheckedChanged({ Basculer-Demarrage $this.Tag.Element $this.Checked })
     }
-    $y += 72
+    $y += 84
   }
   # Tâches planifiées lancées à l'ouverture de session / au démarrage (information seulement)
   $taches = @($r.Taches)
@@ -1669,6 +2355,116 @@ function Remplir-Demarrage($r) {
   Log ((T "Démarrage : {0} appli(s) trouvée(s).") -f $script:demarrage.Count)
 }
 $pDem = NouvellePage "demarrage" "Démarrage" "Appliqué tout de suite, comme le Gestionnaire des tâches. Annulable avec « Tout annuler »." -Defile -Construire { Construire-Demarrage }
+
+# ===================== SYSTÈME > ESPACE DISQUE (v5.7, lecture seule) =====================
+# Mesure ce qui prend de la place (dossiers perso, temporaires, corbeille, jeux Steam, fichiers système,
+# AppData). Lecture en arrière-plan, chaque mesure a un temps maximum. RIEN n'est supprimé ni déplacé.
+$codeEspace = {
+  $l = New-Object System.Collections.ArrayList
+  $rapide = [bool]("LkDisk" -as [type])
+  function Mesure($p, $ms) {
+    if ($rapide) { $ok = $false; $s = [LkDisk]::Size($p, $ms, [ref]$ok); return @([int64]$s, [bool]$ok) }
+    $s = (Get-ChildItem -LiteralPath $p -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum
+    return @([int64]$s, $true)
+  }
+  function Ajout($cat, $nom, $ch, $ms, [switch]$Fichier) {
+    if (-not $ch -or -not (Test-Path -LiteralPath $ch)) { return }
+    if ($Fichier) { try { $s = (Get-Item -LiteralPath $ch -Force -ErrorAction Stop).Length; [void]$l.Add(@{ Cat = $cat; Nom = $nom; Chemin = $ch; Taille = [int64]$s; Complet = $true; Fichier = $true }) } catch {}; return }
+    $m = Mesure $ch $ms
+    [void]$l.Add(@{ Cat = $cat; Nom = $nom; Chemin = $ch; Taille = $m[0]; Complet = $m[1]; Fichier = $false })
+  }
+  $tel = $null; try { $tel = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -ErrorAction Stop)."{374DE290-123F-4565-9164-39C4925E467B}" } catch {}
+  if (-not $tel) { $tel = Join-Path $env:USERPROFILE "Downloads" }
+  Ajout "perso" "Téléchargements" $tel 8000
+  Ajout "perso" "Bureau" ([Environment]::GetFolderPath("Desktop")) 6000
+  Ajout "perso" "Documents" ([Environment]::GetFolderPath("MyDocuments")) 8000
+  Ajout "perso" "Vidéos" ([Environment]::GetFolderPath("MyVideos")) 6000
+  Ajout "perso" "Images" ([Environment]::GetFolderPath("MyPictures")) 6000
+  Ajout "perso" "Musique" ([Environment]::GetFolderPath("MyMusic")) 4000
+  Ajout "temp" "Fichiers temporaires (utilisateur)" $env:TEMP 6000
+  Ajout "temp" "Fichiers temporaires (Windows)" (Join-Path $env:WINDIR "Temp") 6000
+  Ajout "temp" "Corbeille" (Join-Path $env:SystemDrive '$Recycle.Bin') 6000
+  # Steam : bibliothèques lues dans libraryfolders.vdf, plus gros jeux de chaque bibliothèque
+  $steam = $null; try { $steam = "$((Get-ItemProperty "HKCU:\Software\Valve\Steam" -ErrorAction Stop).SteamPath)" -replace '/', '\' } catch {}
+  $biblis = @()
+  if ($steam -and (Test-Path -LiteralPath $steam)) {
+    $biblis += $steam
+    $vdf = Join-Path $steam "steamapps\libraryfolders.vdf"
+    if (Test-Path -LiteralPath $vdf) { foreach ($m in [regex]::Matches((Get-Content -LiteralPath $vdf -Raw), '"path"\s+"([^"]+)"')) { $biblis += ($m.Groups[1].Value -replace '\\\\', '\') } }
+  }
+  $vus = @{}
+  foreach ($b in $biblis) {
+    $com = Join-Path $b "steamapps\common"; $k = $com.ToLower().TrimEnd('\')
+    if ($vus[$k] -or -not (Test-Path -LiteralPath $com)) { continue }; $vus[$k] = $true
+    if ($rapide) {
+      foreach ($ln in [LkDisk]::Top($com, 8, 20000)) { $pp = "$ln".Split('|'); if ($pp.Count -ge 3) { [void]$l.Add(@{ Cat = "steam"; Nom = [IO.Path]::GetFileName($pp[0]); Chemin = $pp[0]; Taille = [int64]$pp[1]; Complet = ($pp[2] -eq "1"); Fichier = $false }) } }
+    } else { foreach ($d in @(Get-ChildItem -LiteralPath $com -Directory -ErrorAction SilentlyContinue | Select-Object -First 30)) { Ajout "steam" $d.Name $d.FullName 3000 } }
+  }
+  foreach ($fs in "hiberfil.sys", "pagefile.sys", "swapfile.sys") { Ajout "systeme" $fs (Join-Path ($env:SystemDrive + "\") $fs) 0 -Fichier }
+  if ($rapide) {
+    foreach ($ln in [LkDisk]::Top($env:LOCALAPPDATA, 6, 15000)) { $pp = "$ln".Split('|'); if ($pp.Count -ge 3) { [void]$l.Add(@{ Cat = "appdata"; Nom = "AppData\Local\" + [IO.Path]::GetFileName($pp[0]); Chemin = $pp[0]; Taille = [int64]$pp[1]; Complet = ($pp[2] -eq "1"); Fichier = $false }) } }
+  }
+  ,$l.ToArray()
+}
+function Taille-Txt([double]$o) {
+  if ($o -ge 1GB) { return ("{0:N1} " -f ($o / 1GB)) + $uGo }
+  if ($o -ge 1MB) { return ("{0:N0} " -f ($o / 1MB)) + (T "Mo") }
+  return ("{0:N0} " -f ($o / 1KB)) + (T "Ko")
+}
+function Construire-Espace {
+  if ($script:lectureEsp) { return }
+  $script:lectureEsp = $true
+  [void](Chargement $pEsp (T "Mesure de l'espace utilisé (jusqu'à une minute sur un gros disque)..."))
+  En-Fond "espace" $codeEspace @{} { param($r) $script:lectureEsp = $false; Geler $pages["espace"].Panel $true; try { Remplir-Espace $r } finally { Geler $pages["espace"].Panel $false } }
+}
+function Remplir-Espace($r) {
+  $pg = $pEsp; Vider $pg
+  $liste = @($r | Where-Object { $_ -and $_.Taille -ge 0 })
+  # résumé des disques
+  $y = 0
+  $dsk = @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq "Fixed" -and $_.IsReady })
+  $cD = New-Object LkCard; $cD.Fill = $cCarte; $cD.Radius = S 12; $cD.Location = Pt 0 0; $cD.Size = Sz 920 (24 + 30 * [math]::Max(1, $dsk.Count))
+  $yd = 12
+  foreach ($d in $dsk) {
+    $pc = [int](100 - 100 * $d.AvailableFreeSpace / [math]::Max(1, $d.TotalSize))
+    [void](Icone $cD "drive" 14 $yd 22 22 16 $cAccentClair $cCarte)
+    [void](Lbl $cD ("$($d.Name.TrimEnd('\')) " + $(if ($d.VolumeLabel) { $d.VolumeLabel } else { "" })) 44 ($yd + 2) 220 18 (Police 12.5 "Bold") $cBlanc $cCarte)
+    $bD = New-Object LkBar; $bD.Location = Pt 270 ($yd + 9); $bD.Size = Sz 400 5; $bD.Fill = $(if ($pc -ge 90) { $cOrange } else { $cAccent }); $bD.Fill2 = $(if ($pc -ge 90) { [Drawing.Color]::Empty } else { $cCyan }); $bD.Track = $cPiste; $bD.Value = $pc; $cD.Controls.Add($bD)
+    $lT = Lbl $cD ((Taille-Txt $d.AvailableFreeSpace) + " " + (T "libres sur") + " " + (Taille-Txt $d.TotalSize)) 690 ($yd + 2) 212 18 (Police 12) $cGris $cCarte; $lT.TextAlign = "TopRight"
+    $yd += 30
+  }
+  $pg.Controls.Add($cD); $y = $cD.Height / $sc + 12
+  $bRe = Bouton $pg "Mesurer à nouveau" 0 $y 200 36; $bRe.Icon = "refresh"
+  $bRe.Add_Click({ $pages["espace"].Construite = $true; Construire-Espace })
+  [void](Lbl $pg "Clique sur une ligne pour ouvrir le dossier. Pour faire de la place : Nettoyage > fichiers temporaires, ou désinstalle les jeux que tu n'utilises plus." 216 ($y + 1) 700 34 (Police 11.5) $cGris $cFond)
+  $y += 52
+  if (-not $liste.Count) { [void](Lbl $pg "Mesure impossible (voir le Journal)." 2 $y 600 20 (Police 13) $cOrange $cFond); $pages["espace"].Panel.Recalc(); return }
+  $max = [double](($liste | Measure-Object Taille -Maximum).Maximum); if ($max -le 0) { $max = 1 }
+  $cats = [ordered]@{ perso = "DOSSIERS PERSONNELS"; steam = "JEUX STEAM (PLUS GROS)"; temp = "TEMPORAIRES ET CORBEILLE"; appdata = "APPDATA (PLUS GROS DOSSIERS)"; systeme = "FICHIERS SYSTÈME (GÉRÉS PAR WINDOWS, NE PAS SUPPRIMER)" }
+  $total = 0
+  foreach ($k in $cats.Keys) {
+    $els = @($liste | Where-Object { $_.Cat -eq $k -and $_.Taille -gt 0 } | Sort-Object { -$_.Taille })
+    if (-not $els.Count) { continue }
+    Section $pg $y $cats[$k]; $y += 32
+    foreach ($el in $els) {
+      $c = New-Object LkCard; $c.Fill = $cCarte; $c.HoverFill = $cCarteSurvol; $c.Radius = S 12; $c.Location = Pt 0 $y; $c.Size = Sz 920 56; $c.Cursor = "Hand"
+      $t1 = Lbl $c (T $el.Nom) 18 9 560 20 (Police 13.5 "Bold") $cBlanc $cCarte; $t1.AutoEllipsis = $true
+      $t2 = Lbl $c $el.Chemin 18 31 560 18 (Police 11.5) $cGris $cCarte; $t2.AutoEllipsis = $true
+      $t3 = Lbl $c ((Taille-Txt $el.Taille) + $(if (-not $el.Complet) { " +" } else { "" })) 620 8 282 22 (Police 14 "Bold") $cBlanc $cCarte; $t3.TextAlign = "TopRight"
+      $bb = New-Object LkBar; $bb.Location = Pt 642 38; $bb.Size = Sz 260 5; $bb.Fill = $cAccent; $bb.Fill2 = $cCyan; $bb.Track = $cPiste; $bb.Value = [int][math]::Max(1, 100 * $el.Taille / $max); $c.Controls.Add($bb)
+      $aide = $el.Chemin + $(if (-not $el.Complet) { "`n" + (T "Mesure arrêtée avant la fin (dossier énorme ou protégé) : la taille réelle est plus grande.") } else { "" })
+      foreach ($x in $c, $t1, $t2, $t3, $bb) {
+        $x.Cursor = "Hand"; $x.Tag = $el; $tip.SetToolTip($x, $aide); Survol-Carte $x
+        $x.Add_Click({ $e = $this.Tag; if ($e.Fichier) { try { [void][Diagnostics.Process]::Start((Join-Path $env:WINDIR "explorer.exe"), "/select,`"$($e.Chemin)`"") } catch {} } else { Ouvrir-Dossier $e.Chemin } })
+      }
+      $pg.Controls.Add($c); $y += 64; $total++
+    }
+    $y += 8
+  }
+  $pages["espace"].Panel.Recalc()
+  Log ((T "Espace disque : {0} élément(s) mesuré(s).") -f $total)
+}
+$pEsp = NouvellePage "espace" "Espace disque" "Ce qui prend de la place sur tes disques. Lecture seule : rien n'est supprimé ni déplacé." -Defile -Construire { Construire-Espace }
 
 # ===================== SYSTÈME > RÉSEAU =====================
 $dnsChoix = [ordered]@{
@@ -1711,13 +2507,13 @@ function Choisir-Dns($k) {
   $script:dnsSel = $k
   foreach ($kk in $boutonsDns.Keys) {
     $b = $boutonsDns[$kk]
-    if ($kk -eq $k) { $b.Fill = $cAccent; $b.HoverFill = Hex "#7a40ee"; $b.ForeColor = [Drawing.Color]::White } else { $b.Fill = $cCarte; $b.HoverFill = $cCarteSurvol; $b.ForeColor = $cBlanc }
+    if ($kk -eq $k) { $b.Fill = $cAccent; $b.Fill2 = $cAccent2; $b.HoverFill = Hex "#7a40ee"; $b.ForeColor = [Drawing.Color]::White } else { $b.Fill = $cCarte; $b.Fill2 = [Drawing.Color]::Empty; $b.HoverFill = $cCarteSurvol; $b.ForeColor = $cBlanc }
     $b.Invalidate()
   }
   $lDnsDet.Text = if ($dnsChoix[$k].Srv.Count) { (T "Serveurs") + " : " + ($dnsChoix[$k].Srv -join "  ·  ") } else { T "Les serveurs DNS donnés par ta box / ton fournisseur d'accès (réglage d'origine de Windows)." }
 }
 $bDnsAppl = New-Object LkButton; $bDnsAppl.Text = (T "Appliquer ce DNS"); $bDnsAppl.Font = Police 13 "Bold"; $bDnsAppl.Radius = S 10
-$bDnsAppl.Location = Pt 0 196; $bDnsAppl.Size = Sz 220 42; $bDnsAppl.Fill = $cAccent; $bDnsAppl.HoverFill = Hex "#7a40ee"
+$bDnsAppl.Location = Pt 0 196; $bDnsAppl.Size = Sz 220 42; $bDnsAppl.Fill = $cAccent; $bDnsAppl.Fill2 = $cAccent2; $bDnsAppl.HoverFill = Hex "#7a40ee"
 $bDnsCache = New-Object LkButton; $bDnsCache.Text = (T "Vider le cache DNS"); $bDnsCache.Font = Police 13 "Bold"; $bDnsCache.Radius = S 10
 $bDnsCache.Location = Pt 232 196; $bDnsCache.Size = Sz 220 42; $bDnsCache.Fill = $cCarte; $bDnsCache.HoverFill = $cCarteSurvol; $bDnsCache.ForeColor = $cBlanc
 $pR.Controls.Add($bDnsAppl); $pR.Controls.Add($bDnsCache)
@@ -1866,7 +2662,11 @@ function Construire-Sante {
   En-Fond "sante" $codeSante @{} { param($r) $script:lectureSante = $false; Remplir-Sante $r }
 }
 function Remplir-Sante($r) {
-  $pg = $pSante; $pg.Controls.Clear(); $y = 0
+  Geler $pages["sante"].Panel $true
+  try { Remplir-Sante2 $r } finally { Geler $pages["sante"].Panel $false }
+}
+function Remplir-Sante2($r) {
+  $pg = $pSante; Vider $pg; $y = 0
   $bMaj = New-Object LkButton; $bMaj.Text = (T "Actualiser"); $bMaj.Font = Police 12 "Bold"; $bMaj.Radius = S 10
   $bMaj.Location = Pt 760 0; $bMaj.Size = Sz 160 34; $bMaj.Fill = $cCarte; $bMaj.HoverFill = $cCarteSurvol; $bMaj.ForeColor = $cBlanc
   $bMaj.Icon = "refresh"; $bMaj.Add_Click({ Construire-Sante }); $pg.Controls.Add($bMaj)
@@ -1992,6 +2792,13 @@ $oRed.Carte.Controls.Add($swRed)
 $swRed.Add_CheckedChanged({ [LkAnim]::Reduit = $swRed.Checked; Enregistrer-Pref "AnimationsReduites" ([int]$swRed.Checked); Log "Animations réduites : $(if ($swRed.Checked) { 'oui' } else { 'non' })." })
 foreach ($el in $oRed.Elements) { $el.Add_Click({ if ($swRed.Enabled) { $swRed.Checked = -not $swRed.Checked } }) }
 $yOpt += 70
+# v5.7 : rendu lissé (cartes dessinées hors écran = pas de scintillement). À couper seulement si une carte s'affiche mal.
+$oLis = LigneOption $pT $yOpt "sparkles" "Rendu lissé" "Cartes sans scintillement. Coupe-le seulement si l'affichage a un souci (prend effet au prochain lancement)."
+$swLis = New-Object LkToggle; $swLis.Size = Sz 44 24; $swLis.Location = Pt 858 19; $swLis.Checked = [LkCard]::Compose; $swLis.OffColor = $cOff
+$oLis.Carte.Controls.Add($swLis)
+$swLis.Add_CheckedChanged({ Enregistrer-Pref "RenduLisse" ([int]$swLis.Checked); Log "Rendu lissé : $(if ($swLis.Checked) { 'oui' } else { 'non' }) (au prochain lancement)." })
+foreach ($el in $oLis.Elements) { $el.Add_Click({ $swLis.Checked = -not $swLis.Checked }) }
+$yOpt += 70
 # Mise à jour de l'appli
 $oMaj = LigneOption $pT $yOpt 0xE895 "Mise à jour de l'appli" "Vérification au démarrage..."
 $bMajVerif = Bouton $oMaj.Carte "Vérifier" 756 13 148 36
@@ -2012,7 +2819,7 @@ $pB = NouvellePage "bios" "Guide BIOS" ((T "Personnalisé pour {0}.") -f $nomCar
 function BoutonBios($txt, $x, $w, $principal) {
   $b = New-Object LkButton; $b.Text = (T $txt); $b.Font = Police 13 "Bold"; $b.Radius = S 10
   $b.Location = Pt $x 0; $b.Size = Sz $w 40
-  if ($principal) { $b.Fill = $cAccent; $b.HoverFill = Hex "#7a40ee" } else { $b.Fill = $cCarte; $b.HoverFill = $cCarteSurvol; $b.ForeColor = $cBlanc }
+  if ($principal) { $b.Fill = $cAccent; $b.Fill2 = $cAccent2; $b.HoverFill = Hex "#7a40ee" } else { $b.Fill = $cCarte; $b.HoverFill = $cCarteSurvol; $b.ForeColor = $cBlanc }
   $pB.Controls.Add($b); return $b
 }
 $bExport  = BoutonBios "Exporter le guide" 0 210 $true
@@ -2109,85 +2916,126 @@ $pAccueil = New-Object LkPanel; $pAccueil.Location = Pt 0 0; $pAccueil.Size = Sz
 $main.Controls.Add($pAccueil)
 $pages["accueil"] = @{ Panel = $pAccueil; Titre = "Tableau de bord"; Sous = ""; Construire = $null; Construite = $true }
 $transp = [Drawing.Color]::Transparent
-# --- Bandeau « Optimiser en 1 clic » ---
-$hero = New-Object LkHero; $hero.Location = Pt 24 10; $hero.Size = Sz 952 262; $hero.Radius = S 18
+# --- v5.8 (interface « barre latérale ») : salutation + état du PC, boutons Rapport / Optimiser ---
+$hr = (Get-Date).Hour
+$prenom = "$env:USERNAME".Trim(); if ($prenom.Length -gt 1) { $prenom = $prenom.Substring(0, 1).ToUpper() + $prenom.Substring(1) }
+$lSalut = Lbl $pAccueil (((T $(if ($hr -ge 5 -and $hr -lt 18) { "Bonjour" } else { "Bonsoir" })) + " $prenom").Trim()) 26 16 540 20 (Police 12.5 "Bold") $cGris $cFond
+$lEtat1 = Lbl $pAccueil "" 24 36 420 42 (Police 25 "Bold") $cBlanc $cFond; $lEtat1.AutoEllipsis = $false
+$lEtat2 = Lbl $pAccueil "" 300 36 300 42 (Police 25 "Bold") $cVif $cFond; $lEtat2.AutoEllipsis = $false
+$bRapH = Bouton $pAccueil "Rapport système" 604 30 176 40; $bRapH.Icon = "file-text"
+$bRapH.Add_Click({ Exporter-Rapport }); $tip.SetToolTip($bRapH, (T "Matériel, pilotes, Windows et réglages appliqués dans un fichier HTML + texte sur le Bureau. Rien n'est envoyé."))
+$bOpti = Bouton $pAccueil "Optimiser maintenant" 788 30 188 40 -Principal; $bOpti.Icon = "zap"
+$bOpti.Add_Click({ Optimiser }); $tip.SetToolTip($bOpti, (T "Point de restauration + sauvegarde de tes réglages, puis application du profil choisi."))
+# --- Carte « Score d'optimisation » (anneau) + 4 lignes d'état ---
+$hero = New-Object LkHero; $hero.Location = Pt 24 92; $hero.Size = Sz 560 204; $hero.Radius = S 16
+$hero.BackColor = $cFond; $hero.Fill = $cCarte; $hero.Border = $cBord
+$hero.GlowRect = New-Object Drawing.Rectangle((S 300), (S -170), (S 380), (S 380)); $hero.GlowAlpha = 30
 $pAccueil.Controls.Add($hero)
-$hT = Lbl $hero "Optimiser en 1 clic" 24 34 600 40 (Police 26 "Bold") $cBlanc $transp
-$hD = Lbl $hero "Choisis un profil : LuKZyR crée un point de restauration, sauvegarde tes réglages puis applique tout." 25 80 500 44 (Police 13) $cGris $transp
-$pillules = [ordered]@{}; $xp = 24
+$hT = Lbl $hero "SCORE D'OPTIMISATION" 24 14 300 18 (Police 10.5 "Bold") $cAccentClair $transp
+$hD = Lbl $hero "Point de restauration + sauvegarde de tes réglages avant d'appliquer le profil." 24 180 512 16 (Police 11) $cGris2 $transp
+$hero.ProgRect = New-Object Drawing.Rectangle((S 24), (S 198), (S 512), (S 3))
+$texteHero = $hD.Text
+$orb = New-Object LkOrb; $orb.Location = Pt 20 38; $orb.Size = Sz 136 136; $orb.Score = 0; $orb.Cursor = "Default"
+$orb.Font = Police 32 "Bold"; $orb.SmallFont = Police 13.5 "Bold"; $orb.SubFont = Police 11; $orb.ForeColor = $cBlanc
+$orb.Text = "–"; $orb.Sub = "/ 100"
+$hero.Controls.Add($orb)
+# --- Carte « Profils en 1 clic » ---
+$cProf = New-Object LkCard; $cProf.Fill = $cCarte; $cProf.Radius = S 16; $cProf.Location = Pt 600 92; $cProf.Size = Sz 376 204
+$pAccueil.Controls.Add($cProf)
+Section $cProf 6 "PROFILS EN 1 CLIC"; $script:derniereSection.Left = S 18; $script:derniereSection.Width = S 340; $script:derniereSection.BackColor = $cCarte
+$pillules = [ordered]@{}; $yp = 44
+$iconesProfils = @{ gaming = "gamepad"; equilibre = "gauge"; portable = "power" }
 foreach ($k in $profils.Keys) {
-  $pl = New-Object LkPill; $pl.Font = Police 13 "Bold"; $pl.SubFont = Police 11; $pl.Radius = S 12
+  $pl = New-Object LkPill; $pl.Font = Police 13.5 "Bold"; $pl.SubFont = Police 11.5; $pl.Radius = S 10; $pl.SubRight = $true; $pl.Icon = $iconesProfils[$k]
   $pl.Text = (T $profils[$k].Nom)
   $n = $profils[$k].On.Count
   $pl.Sub = $(if ($script:langue -eq "en") { "$n settings" } else { "$n réglages" }) + $(if ($k -eq "portable" -and $portable) { " · " + (T "conseillé") } else { "" })
-  $pl.Location = Pt $xp 148; $pl.Size = Sz 156 54; $pl.Tag = $k
+  $pl.Location = Pt 16 $yp; $pl.Size = Sz 344 46; $pl.Tag = $k
   $pl.Add_Click({ Choisir-Profil $this.Tag })
-  $hero.Controls.Add($pl); $pillules[$k] = $pl; $xp += 166
+  $cProf.Controls.Add($pl); $pillules[$k] = $pl; $yp += 52
 }
-# Barre de progression d'OPTIMISER (dans le bandeau, sous les profils)
-$hero.ProgRect = New-Object Drawing.Rectangle((S 24), (S 222), (S 488), (S 3))
-$texteHero = $hD.Text
-$orb = New-Object LkOrb; $orb.Location = Pt 724 22; $orb.Size = Sz 204 204
-$orb.Font = Police 17 "Bold"; $orb.SubFont = Police 11
-$orb.Text = (T "OPTIMISER"); $orb.Sub = (T "≈ 5 min")
-$hero.Controls.Add($orb)
-$orb.Add_Click({ Optimiser })
 
-# --- Jauges (valeurs réelles, mises à jour toutes les 2 s) ---
-function Stat($i, $cle, $valeur, $icone) {
-  # v5.4 (épuré) : pas d'encadré, juste libellé, valeur et une barre fine
-  $c = New-Object LkCard; $c.Fill = $cFond; $c.Radius = S 4
-  $col = if ($i -ge 2) { $i - 1 } else { $i }
-  $c.Location = Pt (48 + $col * 304) 302; $c.Size = Sz 272 70
-  [void](Icone $c $icone 0 1 18 18 14 $cGris $cFond)
-  $k = Lbl $c $cle 24 2 120 16 (Police 10.5 "Bold") $cGris $cFond
-  $p = Lbl $c "" 160 2 112 16 (Police 10.5 "Bold") $cGris $cFond; $p.TextAlign = "TopRight"
-  $v = Lbl $c $valeur 0 24 272 24 (Police 15 "Bold") $cBlanc $cFond; $v.AutoEllipsis = $true
-  $b = New-Object LkBar; $b.Location = Pt 0 58; $b.Size = Sz 272 3; $b.Fill = $cAccent; $b.Fill2 = Hex "#12e0ff"; $b.Track = $cPiste
-  $c.Controls.Add($b); $pAccueil.Controls.Add($c)
-  return @{ Carte = $c; Pct = $p; Val = $v; Barre = $b }
+# --- v5.7 : moniteur en direct (CPU, GPU, RAM, disque) ---
+# CPU et RAM : 2 appels Windows instantanés ; GPU, mémoire vidéo et température : lus par LkMonitor sur un fil
+# d'arrière-plan, SEULEMENT quand le Tableau de bord est affiché (rien du tout sur les autres pages ou réduit).
+Section $pAccueil 304 "EN DIRECT"; $script:derniereSection.Left = S 26; $script:derniereSection.Width = S 948
+function Stat($i, $cle, $valeur, $icone, [switch]$Barre) {
+  $c = New-Object LkCard; $c.Fill = $cCarte; $c.Radius = S 14
+  $c.Location = Pt (24 + $i * 240) 334; $c.Size = Sz 232 132
+  [void](Icone $c $icone 14 14 34 34 18 $cAccentClair $cCarte -Puce $cAccent)
+  [void](Lbl $c $cle 56 14 164 18 (Police 11 "Bold") $cGris $cCarte)
+  $v = Lbl $c $valeur 56 32 166 18 (Police 11) $cGris2 $cCarte
+  $p = Lbl $c "" 14 54 204 40 (Police 27 "Bold") $cBlanc $cCarte; $p.TextAlign = "MiddleLeft"
+  $b = $null; $sp = $null
+  if ($Barre) { $b = New-Object LkBar; $b.Location = Pt 16 108; $b.Size = Sz 200 6; $b.Fill = $cAccent; $b.Fill2 = $cCyan; $b.Track = $cPiste; $c.Controls.Add($b) }
+  else { $sp = New-Object LkSpark; $sp.Location = Pt 10 94; $sp.Size = Sz 212 32; $c.Controls.Add($sp) }
+  $pAccueil.Controls.Add($c)
+  return @{ Carte = $c; Pct = $p; Val = $v; Barre = $b; Spark = $sp }
 }
-$stCpu = Stat 0 "CPU" $cpuCourt "cpu"
-$stGpu = Stat 1 "GPU" $gpuCourt "monitor"
-$ramTxt = "$ramGo $uGo" + $(if ($ramMhz) { " · $ramMhz MHz" } else { "" })
-$stRam = Stat 2 "RAM" $ramTxt "memory"
-$stC   = Stat 3 "$($env:SystemDrive)" "" "drive"
-$stGpu.Barre.Visible = $false
-$stGpu.Carte.Visible = $false   # v5.4 (épuré) : 3 infos clés seulement (le GPU reste dans Matériel > Infos)
-$sepAccueil = New-Object Windows.Forms.Panel; $sepAccueil.Location = Pt 48 284; $sepAccueil.Size = Sz 904 1; $sepAccueil.BackColor = $cPiste2
-$pAccueil.Controls.Add($sepAccueil)
-
-# v5.6 : la charge GPU n'est plus lue du tout (carte masquée depuis v5.4) : l'ancienne boucle (somme
-# plafonnée, arrêt définitif au 1er échec) est supprimée. Le GPU reste affiché dans Matériel > Mon PC.
-$gpuEtat = @{ Load = -1 }
+$stCpu = Stat 0 "PROCESSEUR" $cpuCourt "cpu"
+$stGpu = Stat 1 "CARTE GRAPHIQUE" $gpuCourt "monitor"
+$stRam = Stat 2 "MÉMOIRE" "$ramGo $uGo" "memory"
+$stC   = Stat 3 ((T "DISQUE") + " $($env:SystemDrive)") "" "drive" -Barre
+foreach ($s in $stCpu, $stGpu, $stRam, $stC) { $tip.SetToolTip($s.Carte, (T "Mesures en direct, mises à jour toutes les 1,5 s quand le Tableau de bord est affiché.")) }
 $script:statsVues = $false
+$script:tempsLhm = @{ Cpu = $null; Gpu = $null; Lu = [datetime]::MinValue; EnCours = $false }
 function Pct($lbl, $v, $sfx = " %") { if ($script:statsVues) { $lbl.Text = "$v$sfx" } else { [LkAnim]::CountTo($lbl, [int]$v, $sfx, 700) } }
+function Maj-Moniteur { [LkMonitor]::Wanted = ($script:pageActive -eq "accueil" -and $f.WindowState -ne "Minimized"); if ([LkMonitor]::Wanted) { [LkMonitor]::Start() } }
+# Températures LibreHardwareMonitor (s'il est ouvert) : lecture en arrière-plan toutes les 10 s au plus
+$codeTempsLhm = {
+  $r = @{ Cpu = $null; Gpu = $null }
+  foreach ($ns in "root/LibreHardwareMonitor", "root/OpenHardwareMonitor") {
+    try {
+      $cap = @(Get-CimInstance -Namespace $ns -ClassName Sensor -Filter "SensorType='Temperature'" -ErrorAction Stop)
+      if (-not $r.Cpu) { $c = $cap | Where-Object { "$($_.Identifier)" -match 'cpu' -and "$($_.Name)" -match 'Tctl|Tdie|Package|Core Average' } | Select-Object -First 1; if ($c -and $c.Value -gt 15 -and $c.Value -lt 115) { $r.Cpu = [math]::Round([double]$c.Value) } }
+      if (-not $r.Gpu) { $c = $cap | Where-Object { "$($_.Identifier)" -match 'gpu' -and "$($_.Name)" -match '^(GPU Core|GPU Hot ?Spot|Hot ?Spot|GPU Edge|Edge)$' } | Sort-Object { if ("$($_.Name)" -eq 'GPU Core') { 0 } else { 1 } } | Select-Object -First 1; if ($c -and $c.Value -gt 15 -and $c.Value -lt 115) { $r.Gpu = [math]::Round([double]$c.Value) } }
+    } catch {}
+  }
+  $r
+}
 function MajStats {
-  $cl = [LkNative]::CpuLoad(); if ($cl -ge 0) { $stCpu.Barre.Value = $cl; Pct $stCpu.Pct $cl }
-  $rl = [LkNative]::RamLoad(); if ($rl -ge 0) { $stRam.Barre.Value = $rl; Pct $stRam.Pct $rl }
-  if ($gpuEtat.Load -ge 0) { $stGpu.Barre.Visible = $true; $stGpu.Barre.Value = $gpuEtat.Load; $stGpu.Pct.Text = "$($gpuEtat.Load) %" }
+  $cl = [LkNative]::CpuLoad(); if ($cl -ge 0) { $stCpu.Spark.Push($cl); Pct $stCpu.Pct $cl }
+  $rl = [LkNative]::RamLoad()
+  if ($rl -ge 0) { $stRam.Spark.Push($rl); Pct $stRam.Pct $rl; if ($ramGo) { $stRam.Val.Text = ("{0:N1} / {1} $uGo " -f ($ramGo * $rl / 100.0), $ramGo) + (T "utilisés") + $(if ($ramMhz) { " · $ramMhz MHz" } else { "" }) } }
+  $gl = [LkMonitor]::Gpu
+  if ($gl -ge 0) { $stGpu.Spark.Push($gl); Pct $stGpu.Pct $gl } elseif (-not $stGpu.Pct.Text) { $stGpu.Pct.Text = "–" }
+  # températures : LibreHardwareMonitor (si ouvert), sinon zone thermique Windows (rare sur Ryzen de bureau)
+  if (-not $script:tempsLhm.EnCours -and ((Get-Date) - $script:tempsLhm.Lu).TotalSeconds -ge 10) {
+    $script:tempsLhm.Lu = Get-Date
+    if (@([Diagnostics.Process]::GetProcessesByName("LibreHardwareMonitor")).Count -or @([Diagnostics.Process]::GetProcessesByName("OpenHardwareMonitor")).Count) {
+      $script:tempsLhm.EnCours = $true
+      En-Fond "temperatures" $codeTempsLhm @{} { param($r) $script:tempsLhm.EnCours = $false; if ($r) { $script:tempsLhm.Cpu = $r.Cpu; $script:tempsLhm.Gpu = $r.Gpu } }
+    } else { $script:tempsLhm.Cpu = $null; $script:tempsLhm.Gpu = $null }
+  }
+  $tc = if ($script:tempsLhm.Cpu) { $script:tempsLhm.Cpu } elseif ([LkMonitor]::Temp -gt 0) { [LkMonitor]::Temp } else { $null }
+  $stCpu.Val.Text = $cpuCourt + $(if ($tc) { " · $tc °C" } else { "" })
+  $vr = [LkMonitor]::Vram; $vTot = if ($gpus.Count) { $gpus[0].VramGo } else { 0 }
+  $txtG = $gpuCourt
+  if ($vr -gt 0) { $txtG = ("VRAM {0:N1}" -f ($vr / 1GB)) + $(if ($vTot) { " / $vTot $uGo" } else { " $uGo" }) }
+  if ($script:tempsLhm.Gpu) { $txtG += " · $($script:tempsLhm.Gpu) °C" }
+  $stGpu.Val.Text = $txtG
   try {
     $dC = New-Object IO.DriveInfo($env:SystemDrive)
     $libre = [math]::Round($dC.AvailableFreeSpace / 1GB); $pc = [int](100 - 100 * $dC.AvailableFreeSpace / $dC.TotalSize)
-    $sfx = " " + (T "Go libres")
-    if ($script:statsVues) { $stC.Val.Text = "$libre$sfx" } else { [LkAnim]::CountTo($stC.Val, [int]$libre, $sfx, 700) }
-    # v5.6 : le pourcentage est l'espace UTILISÉ (le grand chiffre est l'espace libre) : on l'écrit
-    $stC.Barre.Value = $pc; Pct $stC.Pct $pc (" % " + (T "utilisés"))
+    $stC.Val.Text = "$libre " + (T "Go libres sur") + " $([math]::Round($dC.TotalSize / 1GB)) $uGo"
+    $stC.Barre.Value = $pc; Pct $stC.Pct $pc
+    $tip.SetToolTip($stC.Pct, (T "Espace utilisé sur le disque système"))
   } catch {}
   $script:statsVues = $true
 }
 [void][LkNative]::CpuLoad()
-$tStats = New-Object Windows.Forms.Timer; $tStats.Interval = 2000
-# v5.5 : jauges mises à jour seulement quand le tableau de bord est visible et la fenêtre pas réduite
+$tStats = New-Object Windows.Forms.Timer; $tStats.Interval = 1500
+# jauges mises à jour seulement quand le tableau de bord est visible et la fenêtre pas réduite
 $tStats.Add_Tick({ if ($f.WindowState -ne "Minimized" -and $script:pageActive -eq "accueil") { MajStats } }); $tStats.Start()
 
 # --- Bandeau d'alertes (données réelles) ---
 function Alerte($i) {
-  $a = New-Object LkTint; $a.Radius = S 12; $a.Location = Pt (48 + $i * 304) 398; $a.Size = Sz 290 46; $a.BackColor = $cFond
-  $ic = Icone $a "" 0 0 22 46 16 $cVert $transp
-  $tx = Lbl $a "" 28 0 186 46 (Police 12) $cTexte2 $transp; $tx.TextAlign = "MiddleLeft"
-  $ln = Lbl $a "" 188 0 102 46 (Police 12 "Bold") $cVert $transp; $ln.TextAlign = "MiddleRight"; $ln.Cursor = "Hand"
-  $pAccueil.Controls.Add($a)
+  # v5.8 : 4 lignes d'état à droite de l'anneau de score
+  $a = New-Object LkTint; $a.Radius = S 8; $a.Location = Pt 172 (42 + $i * 33) ; $a.Size = Sz 368 29; $a.BackColor = $cCarte
+  $ic = Icone $a "" 4 0 22 29 15 $cVert $transp
+  $tx = Lbl $a "" 30 0 250 29 (Police 12) $cTexte2 $transp; $tx.TextAlign = "MiddleLeft"
+  $ln = Lbl $a "" 262 0 100 29 (Police 11.5 "Bold") $cVert $transp; $ln.TextAlign = "MiddleRight"; $ln.Cursor = "Hand"
+  $hero.Controls.Add($a)
   $al = @{ Carte = $a; Icone = $ic; Texte = $tx; Lien = $ln; Action = $null }
   $ln.Tag = $al; $ln.Add_Click({ if ($this.Tag.Action) { & $this.Tag.Action } })
   return $al
@@ -2204,7 +3052,7 @@ function Regler-Alerte($al, $glyphe, $couleur, $texte, $lien, $action) {
     [LkAnim]::FadeFore($al.Texte, $cFond, $cTexte2, 320); if ($lien) { [LkAnim]::FadeFore($al.Lien, $cFond, $couleur, 320) }; [LkAnim]::FadeFore($al.Icone, $cFond, $couleur, 320)
   }
 }
-$alDem = Alerte 0; $alOpt = Alerte 1; $alSante = Alerte 2
+$alScore = Alerte 0; $alDem = Alerte 1; $alOpt = Alerte 2; $alSante = Alerte 3
 $cViolet = $cAccentClair   # suit le thème (plus foncé en clair)
 # v5.1 : les lectures (démarrage, disques) se font en arrière-plan ; le bandeau se remplit ensuite
 $codeDisques = {
@@ -2216,10 +3064,12 @@ $codeDisques = {
 function Alerte-Demarrage($r) {
   if (-not $r) { return }
   $l = @($r.Liste | Where-Object { $_.Actif -and -not $_.Protege -and $_.Impact -eq "élevé" })
+  $script:scoreDem = $l.Count; try { Maj-Score } catch {}
   if ($l.Count) { Regler-Alerte $alDem 0xE7BA $cOrange ((T "{0} appli(s) lourde(s) au démarrage") -f $l.Count) (T "Voir") { Afficher "demarrage" } }
   else { Regler-Alerte $alDem 0xE73E $cVert (T "Démarrage léger : rien de lourd") (T "Voir") { Afficher "demarrage" } }
 }
 function Alerte-Disques($d) {
+  if ($d) { $script:scoreDisques = -not @($d.Problemes).Count; try { Maj-Score } catch {} }
   if (-not $d -or ($etatMaj.Statut -in @("dispo", "telechargement", "telecharge"))) { return }
   if (@($d.Problemes).Count) { Regler-Alerte $alSante 0xE783 $cRouge ((T "Disque à surveiller : {0}") -f @($d.Problemes)[0]) (T "Santé") { Afficher "sante" } }
   elseif ($d.PcLibre -lt 10) { Regler-Alerte $alSante 0xE783 $cRouge ((T "{0}: presque plein ({1} % libre)") -f $d.Lettre, $d.PcLibre) (T "Santé") { Afficher "sante" } }
@@ -2249,47 +3099,85 @@ function Maj-AlerteOptim {
   else { Regler-Alerte $alOpt 0xE946 $cAccentClair (T "Pas encore optimisé : choisis un profil") "" $null }
 }
 
-# --- Tuiles vers les sections ---
-$tuiles = @{}
-$defTuiles = @(
-  @("performance", 0xE945, "#a78bfa", "Performance"),
-  @("nettoyage",   0xE74D, "#34d399", "Nettoyage et confidentialité"),
-  @("applis",      0xE71D, "#60a5fa", "Applications"),
-  @("systeme",     0xE770, "#f472b6", "Système"),
-  @("materiel",    0xE950, "#fbbf24", "Matériel"),
-  @("parametres",  0xE713, "#94a3b8", "Paramètres")
+# ===================== v5.8 : SCORE D'OPTIMISATION (honnête, lecture seule) =====================
+# Calculé UNIQUEMENT à partir de ce qui est lu sur ce PC : 10 réglages vérifiés dans le registre (70 points),
+# applis lourdes au démarrage (10), espace libre du disque système (10), santé des disques (5), âge du pilote
+# graphique (5). Une mesure pas encore lue (démarrage, disques, pilote) n'est pas comptée du tout (ni pour, ni
+# contre). VBS n'est pas compté : c'est un compromis sécurité / performance, pas un « mieux ».
+function Lire-Reg($chemin, $nom) { try { (Get-ItemProperty -LiteralPath $chemin -Name $nom -ErrorAction Stop).$nom } catch { $null } }
+$script:scoreDem = $null; $script:scoreDisques = $null; $script:scoreDetail = @()
+$testsScore = @(
+  @("Mode Jeu", { $v = Lire-Reg "HKCU:\Software\Microsoft\GameBar" "AutoGameModeEnabled"; ($null -eq $v) -or ($v -ne 0) }),
+  @("Captures de jeu en arrière-plan coupées", { (Lire-Reg "HKCU:\System\GameConfigStore" "GameDVR_Enabled") -eq 0 }),
+  @("Planification GPU à accélération matérielle", { (Lire-Reg "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode") -eq 2 }),
+  @("Priorité aux jeux", { (Lire-Reg "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" "GPU Priority") -eq 8 }),
+  @("Souris sans accélération", { "$(Lire-Reg 'HKCU:\Control Panel\Mouse' 'MouseSpeed')" -eq "0" }),
+  @("Optimisations des jeux en fenêtre", { "$(Lire-Reg 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences' 'DirectXUserGlobalSettings')" -match 'SwapEffectUpgradeEnable=1' }),
+  @("Télémétrie réduite", { $v = Lire-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry"; ($null -ne $v) -and ($v -le 1) }),
+  @("Applis de démarrage sans délai", { (Lire-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" "StartupDelayInMSec") -eq 0 }),
+  @("Edge sans préchargement", { (-not (Test-Path -LiteralPath (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"))) -or ((Lire-Reg "HKLM:\SOFTWARE\Policies\Microsoft\Edge" "StartupBoostEnabled") -eq 0) }),
+  @("Assistant de stockage", { (Lire-Reg "HKCU:\Software\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy" "01") -eq 1 })
 )
-for ($i = 0; $i -lt $defTuiles.Count; $i++) {
-  $d = $defTuiles[$i]
-  $c = New-Object LkCard; $c.Fill = $cCarte; $c.HoverFill = $cCarteSurvol; $c.Radius = S 14
-  $c.Location = Pt (24 + ($i % 3) * 321) (398 + [math]::Floor($i / 3) * 84); $c.Size = Sz 309 74; $c.Cursor = "Hand"; $c.Tag = $d[0]; $c.Visible = $false
-  $ib = New-Object LkBadge; $ib.Text = ""; $ib.Icon = [LkIcons]::Resolve([string][char]$d[1]); $ib.IconSize = [float](22 * $sc); $ib.Radius = S 12; $ib.Alpha = 36
-  $ib.Accent = Hex $d[2]; $ib.AccentLight = [LkAnim]::Mix((Hex $d[2]), [Drawing.Color]::Black, 0.25); $ib.Location = Pt 16 15; $ib.Size = Sz 44 44
-  $c.Controls.Add($ib)
-  $tt = Lbl $c $d[3] 74 15 194 22 (Police 14 "Bold") $cBlanc $cCarte
-  foreach ($tp in 13, 12) { if ((Largeur $tt.Text $tt.Font) -gt $tt.Width) { $tt.Font = Police $tp "Bold" } }
-  $ts = Lbl $c "" 74 39 200 18 (Police 12) $cGris $cCarte
-  $ta = Icone $c "chevron" 270 0 26 74 16 $cGris2 $cCarte
-  foreach ($el in $c, $ib, $tt, $ts, $ta) {
+function Calculer-Score {
+  $pts = 0.0; $max = 0.0; $det = @(); $ok = 0
+  foreach ($ts in $testsScore) {
+    $r = $false; try { $r = [bool](& $ts[1]) } catch {}
+    if ($r) { $ok++; $pts += 7 }; $max += 7
+    $det += , @($r, (T $ts[0]), $(if ($r) { 7 } else { 0 }), 7)
+  }
+  if ($null -ne $script:scoreDem) { $p = [math]::Max(0, 10 - 3 * $script:scoreDem); $pts += $p; $max += 10; $det += , @(($script:scoreDem -eq 0), ((T "Applis lourdes au démarrage") + " : $($script:scoreDem)"), $p, 10) }
+  try {
+    $dC = New-Object IO.DriveInfo($env:SystemDrive); $pl = [math]::Round(100 * $dC.AvailableFreeSpace / [math]::Max(1, $dC.TotalSize))
+    $p = if ($pl -ge 20) { 10 } elseif ($pl -ge 10) { 5 } else { 0 }; $pts += $p; $max += 10
+    $det += , @(($p -eq 10), ((T "Espace libre sur {0}") -f $env:SystemDrive) + " : $pl %", $p, 10)
+  } catch {}
+  if ($null -ne $script:scoreDisques) { $p = if ($script:scoreDisques) { 5 } else { 0 }; $pts += $p; $max += 5; $det += , @([bool]$script:scoreDisques, (T "Disques en bonne santé"), $p, 5) }
+  $ag = @($script:infosPilotes | Where-Object { $_.Age -ge 0 } | Select-Object -First 1)
+  if ($ag.Count) { $p = if ($ag[0].Age -le 180) { 5 } else { 0 }; $pts += $p; $max += 5; $det += , @(($p -eq 5), ((T "Pilote graphique de moins de 6 mois") + " (" + ((T "{0} jours") -f $ag[0].Age) + ")"), $p, 5) }
+  $score = if ($max -gt 0) { [int][math]::Round(100 * $pts / $max) } else { 0 }
+  return @{ Score = $score; Ok = $ok; Total = $testsScore.Count; Detail = $det }
+}
+function Maj-Score {
+  $r = Calculer-Score; $script:scoreDetail = $r.Detail; $script:score = $r.Score
+  if (-not $script:enCours) { $orb.Text = "$($r.Score)"; $orb.Sub = "/ 100"; $orb.SetScore($r.Score / 100.0) }
+  $e = if ($r.Score -ge 80) { @("Ton PC est en ", "bonne forme") } elseif ($r.Score -ge 55) { @("Ton PC est ", "presque optimisé") } else { @("Ton PC peut ", "aller plus vite") }
+  $lEtat1.Text = (T $e[0]); $lEtat2.Text = (T $e[1])
+  $lEtat1.Width = (Largeur $lEtat1.Text $lEtat1.Font) + 2; $lEtat2.Left = $lEtat1.Right - (S 6); $lEtat2.Width = (Largeur $lEtat2.Text $lEtat2.Font) + 4
+  $coul = if ($r.Ok -eq $r.Total) { $cVert } elseif ($r.Ok -ge [math]::Ceiling($r.Total / 2)) { $cAccentClair } else { $cOrange }
+  Regler-Alerte $alScore $(if ($r.Ok -eq $r.Total) { 0xE73E } else { 0xE945 }) $coul ((T "{0}/{1} réglages recommandés en place") -f $r.Ok, $r.Total) (T "Détails") { Afficher-DetailScore }
+  $tip.SetToolTip($orb, (T "Score calculé seulement avec ce qui est lu sur ce PC. Clique sur « Détails » pour voir chaque point."))
+}
+function Afficher-DetailScore {
+  $l = @($script:scoreDetail | ForEach-Object { $(if ($_[0]) { "✓ " } else { "✗ " }) + $_[1] + "   (" + $_[2] + "/" + $_[3] + ")" })
+  $msg = ((T "Score d'optimisation : {0}/100") -f $script:score) + "`n`n" + ($l -join "`n") + "`n`n" + (T "Seul ce qui est lu sur ce PC compte. Une mesure pas encore lue n'est pas comptée. VBS n'est pas compté : c'est un compromis sécurité / performance.")
+  [void](Boite $msg)
+}
+
+function Maj-Tuiles { }   # v5.8 : tuiles supprimées (remplacées par la barre latérale)
+# v5.7 : accès rapide aux nouveautés
+Section $pAccueil 474 "ACCÈS RAPIDE"; $script:derniereSection.Left = S 26; $script:derniereSection.Width = S 948
+$rapides = @{}
+$defRapides = @(
+  @("session", "gamepad", "Session de jeu", "Ferme les applis en jeu"),
+  @("espace", "pie", "Espace disque", "Ce qui prend de la place"),
+  @("demarrage", "sliders", "Démarrage", "Applis au démarrage"),
+  @("nettoyage", "sparkles", "Nettoyage", "Windows plus léger")
+)
+for ($i = 0; $i -lt $defRapides.Count; $i++) {
+  $d = $defRapides[$i]
+  $c = New-Object LkCard; $c.Fill = $cCarte; $c.HoverFill = $cCarteSurvol; $c.Radius = S 12
+  $c.Location = Pt (24 + $i * 240) 504; $c.Size = Sz 232 64; $c.Cursor = "Hand"; $c.Tag = $d[0]
+  $ic = Icone $c $d[1] 12 14 36 36 20 $cAccentClair $cCarte
+  $tt = Lbl $c $d[2] 54 12 150 22 (Police 13.5 "Bold") $cBlanc $cCarte
+  $ts = Lbl $c $d[3] 54 34 152 18 (Police 11) $cGris $cCarte
+  $ta = Icone $c "chevron" 204 0 22 64 15 $cGris2 $cCarte
+  foreach ($el in $c, $ic, $tt, $ts, $ta) {
     $el.Cursor = "Hand"; $el.Tag = $d[0]
-    $el.Add_Click({ Afficher-Groupe $this.Tag })
+    $el.Add_Click({ switch ($this.Tag) { "session" { Afficher "session" } "espace" { Afficher "espace" } "demarrage" { Afficher "demarrage" } "nettoyage" { Afficher-Groupe "nettoyage" } } })
     Survol-Carte $el
   }
-  $pAccueil.Controls.Add($c); $tuiles[$d[0]] = $ts
+  $pAccueil.Controls.Add($c); $rapides[$d[0]] = $ts
 }
-$tuiles["systeme"].Text = (T "Démarrage, réseau, réparation")
-$tuiles["materiel"].Text = (T "Pilotes, santé, BIOS")
-$tuiles["parametres"].Text = (T "Thème, langue, mises à jour")
-function Maj-Tuiles {
-  foreach ($k in "perf", "nettoyage", "applis") {
-    $l = @($toggles | Where-Object { $_.Parent -and $_.Parent.Parent -eq $pages[$k].Panel.Content -and ($k -ne "applis" -or "$($_.Tag.Cle)" -like "app:*") })
-    $n = $l.Count; $a = @($l | Where-Object { $_.Checked }).Count
-    $txt = if ($script:langue -eq "en") { "$n settings · $a on" } else { "$n réglages · $a activés" }
-    if ($k -eq "applis") { $txt = if ($script:langue -eq "en") { "$n apps · $a selected" } else { "$n applis · $a cochées" } }
-    $tuiles[$(if ($k -eq "perf") { "performance" } else { $k })].Text = $txt
-  }
-}
-$pied = Lbl $pAccueil "Avant chaque changement : point de restauration + sauvegarde des réglages. « Tout annuler » à tout moment." 48 560 900 20 (Police 11.5) $cGris2 $cFond
 
 
 # ===================== BARRE DU BAS (pages de section) =====================
@@ -2307,24 +3195,30 @@ $bAnnulerBas.Location = Pt 600 8; $bAnnulerBas.Size = Sz 164 42; $bAnnulerBas.Fi
 $bAnnulerBas.Add_Click({ Tout-Annuler })
 $barreBas.Controls.Add($bAnnulerBas)
 $bAppliquer = New-Object LkButton; $bAppliquer.Text = (T "APPLIQUER"); $bAppliquer.Font = Police 15 "Bold"; $bAppliquer.Radius = S 10
-$bAppliquer.Location = Pt 776 6; $bAppliquer.Size = Sz 192 46; $bAppliquer.Fill = $cAccent; $bAppliquer.HoverFill = Hex "#7a40ee"
+$bAppliquer.Location = Pt 776 6; $bAppliquer.Size = Sz 192 46; $bAppliquer.Fill = $cAccent; $bAppliquer.Fill2 = $cAccent2; $bAppliquer.HoverFill = Hex "#7a40ee"
 $barreBas.Controls.Add($bAppliquer)
 
 $script:enCours = $false
-function MajCompteur {
+# v5.7 : un clic sur un interrupteur ne recalcule plus tout sur-le-champ : le compteur est mis à jour 80 ms
+# plus tard (une seule fois même si 20 interrupteurs changent), l'animation de l'interrupteur reste fluide
+$tCompteur = New-Object Windows.Forms.Timer; $tCompteur.Interval = 80
+$tCompteur.Add_Tick({ $tCompteur.Stop(); try { MajCompteur-Maintenant } catch {} })
+function MajCompteur { $tCompteur.Stop(); $tCompteur.Start() }
+function MajCompteur-Maintenant {
   if ($script:enCours) { return }
-  $coches = @($toggles | Where-Object { $_.Checked })
-  $na = @($coches | Where-Object { "$($_.Tag.Cle)" -like "app:*" -or "$($_.Tag.Cle)" -eq "majtout" }).Count
-  $np = @($coches | Where-Object { "$($_.Tag.Cle)" -eq "pilote" }).Count
-  $n = $coches.Count - $na - $np
-  $av = @($coches | Where-Object { $_.Tag.Badge -in @("a", "d") }).Count
+  $n = 0; $na = 0; $np = 0; $av = 0
+  foreach ($sw in $toggles) {
+    if (-not $sw.Checked) { continue }
+    $k = "$($sw.Tag.Cle)"
+    if ($k -like "app:*" -or $k -eq "majtout") { $na++ } elseif ($k -eq "pilote") { $np++ } else { $n++ }
+    if ($sw.Tag.Badge -eq "a" -or $sw.Tag.Badge -eq "d") { $av++ }
+  }
   $txt = if ($script:langue -eq "en") { "$n setting$(if ($n -ne 1) { 's' })" } else { "$n réglage$(if ($n -gt 1) { 's' })" }
   if ($na) { $txt += " · " + $(if ($script:langue -eq "en") { "$na app$(if ($na -ne 1) { 's' })" } else { "$na appli$(if ($na -gt 1) { 's' })" }) }
   if ($np) { $txt += " · " + $(if ($script:langue -eq "en") { "$np driver$(if ($np -ne 1) { 's' })" } else { "$np pilote$(if ($np -gt 1) { 's' })" }) }
   $txt += $(if ($script:langue -eq "en") { " selected" } else { " sélectionné(s)" })
   if ($av) { $txt += " · " + $(if ($script:langue -eq "en") { "$av advanced / permanent" } else { "$av avancé(s) / définitif(s)" }) }
   $compteur.Text = $txt
-  if ($tuiles) { Maj-Tuiles }
 }
 
 # ===================== JOURNAL / FICHIER =====================
@@ -2484,7 +3378,7 @@ function Fin-Execution {
   if ($script:arrete) { $compteur.ForeColor = $cOrange; $compteur.Text = (T "Arrêté : rien n'a été modifié.") }
   $bAppliquer.Busy = $false; $fondProg.Busy = $false
   $bAppliquer.Text = (T "TERMINÉ"); $bAppliquer.Enabled = $true
-  $orb.Busy = $false; $orb.Text = (T "TERMINÉ"); $orb.Sub = (T "Redémarre le PC")
+  $orb.Busy = $false; $bOpti.Busy = $false; $orb.Text = (T "TERMINÉ"); $orb.Sub = (T "Redémarre le PC")
   # après « Tout annuler », le bouton redevient OPTIMISER (l'appli n'est plus « optimisée »)
   if ($script:estRestauration) { $orb.Text = (T "OPTIMISER"); $orb.Sub = (T "Redémarre le PC") }
   foreach ($pl in $pillules.Values) { $pl.Enabled = $true }
@@ -2502,7 +3396,7 @@ function Fin-Execution {
   else { Afficher-Resume $duree }
 }
 $tCacheProg = New-Object Windows.Forms.Timer; $tCacheProg.Interval = 4000
-$tCacheProg.Add_Tick({ $tCacheProg.Stop(); if (-not $script:enCours) { $hero.SetProg(-1); try { $orb.SetProgress(-1) } catch {} } })
+$tCacheProg.Add_Tick({ $tCacheProg.Stop(); if (-not $script:enCours) { $hero.SetProg(-1); try { $orb.SetProgress(-1) } catch {}; try { Maj-Score } catch {} } })
 
 # Fenêtre de résumé après OPTIMISER / APPLIQUER / Tout annuler : ce qui a été fait + redémarrage
 function Afficher-Resume($duree) {
@@ -2581,6 +3475,7 @@ $bAppliquer.Add_Click({
   if (Confirmer-Plan $r) { Lancer-Plan $r.Plan -Resume $r.Liste }
 })
 function Lancer-Plan($plan, [switch]$Ici, $Resume = $null, $Titre = "", [switch]$SansPoint) {
+  if ((Session-Active) -and -not $TestAuto) { [void](Boite (T "Une session de jeu est en cours : termine-la d'abord (Performance > Session de jeu), elle a fermé des applis et peut avoir changé le plan d'alimentation.")); return }
   $script:sansPoint = [bool]$SansPoint
   $script:enCours = $true; $script:plan = @($plan); $script:nbEtapes = $script:plan.Count; $script:idx = -1; $script:estRestauration = $false
   $script:resume = @($Resume | Where-Object { $_ }); $script:titreResume = $Titre; $script:nbErreurs = 0; $script:etapesErreur = @(); $script:debut = Get-Date
@@ -2589,7 +3484,7 @@ function Lancer-Plan($plan, [switch]$Ici, $Resume = $null, $Titre = "", [switch]
   foreach ($e in $script:plan) { if ("$($e.Args)" -match '-Restaurer') { $script:estRestauration = $true } }
   foreach ($sw in $toggles) { $sw.Enabled = $false }
   $bAppliquer.Enabled = $false; $bAppliquer.Text = $(if ([LkAnim]::On) { T "EN COURS" } else { (T "EN COURS") + "..." }); $bAppliquer.Busy = $true
-  $orb.Text = (T "EN COURS"); $orb.Sub = ""; $orb.Busy = $true
+  $orb.Text = (T "EN COURS"); $orb.Sub = ""; $orb.Busy = $true; $bOpti.Busy = $true
   foreach ($pl in $pillules.Values) { $pl.Enabled = $false }
   $compteur.ForeColor = $cBlanc; $fondProg.Value = 0; $fondProg.Visible = $true; $fondProg.Busy = $true
   Log "Début : $($script:nbEtapes) étape(s)."
@@ -2604,15 +3499,20 @@ function Appliquer-Theme([bool]$clair) {
   $de = $palettes[$(if ($script:themeClair) { "clair" } else { "sombre" })]; $vers = $palettes[$(if ($clair) { "clair" } else { "sombre" })]
   $map = @{}; foreach ($k in $de.Keys) { $map[(Hex $de[$k]).ToArgb()] = Hex $vers[$k] }
   function M($col) { if ($col.IsEmpty) { return $col }; $n = $map[$col.ToArgb()]; if ($n) { return $n } else { return $col } }
+  [LkCard]::Instant = $true; Geler $f $true
+  try {
   $pile = New-Object System.Collections.Stack; $pile.Push($f)
   if ($script:frResume -and -not $script:frResume.IsDisposed) { $pile.Push($script:frResume) }   # fenêtre de résumé ouverte : suit le thème aussi
   while ($pile.Count) {
     $c = $pile.Pop()
-    if ($c -is [LkCard]) { $c.HoverFill = M $c.HoverFill; $c.SetFill((M $c.Fill)) }
+    if ($c -is [LkCard]) { $c.HoverFill = M $c.HoverFill; $c.Border = M $c.Border; $c.HoverBorder = M $c.HoverBorder; $c.SetFill((M $c.Fill)) }
+    elseif ($c -is [LkHero]) { $c.Fill = M $c.Fill; $c.Border = M $c.Border; $c.BackColor = M $c.BackColor; $c.Invalidate() }
+    elseif ($c -is [LkSection]) { $c.Line = M $c.Line; $c.BackColor = M $c.BackColor; $c.Invalidate() }
     elseif ($c -is [LkToggle]) { $c.OffColor = M $c.OffColor; $c.Invalidate() }
     elseif ($c -is [LkBar]) { $c.Track = M $c.Track; $c.Invalidate() }
     elseif ($c -is [LkButton]) { $c.Fill = M $c.Fill; $c.HoverFill = M $c.HoverFill; $c.ForeColor = M $c.ForeColor; $c.Invalidate() }
     elseif ($c -is [LkIndicator]) { $c.Fill = M $c.Fill; $c.Invalidate() }
+    elseif ($c -is [LkNav]) { $c.HoverFill = M $c.HoverFill; $c.ActiveFill = M $c.ActiveFill; $c.ActiveFore = M $c.ActiveFore; $c.Invalidate() }
     else {
       if ($c -is [LkScroll]) { $c.Thumb = M $c.Thumb }
       if ($c -is [LkIcon]) { $c.Chip = M $c.Chip }
@@ -2624,12 +3524,14 @@ function Appliquer-Theme([bool]$clair) {
   $bMini.Tag = M $bMini.Tag
   $script:themeClair = $clair
   Charger-Palette $clair
+  [LkCard]::BordDefaut = $cBord; [LkCard]::BordSurvolDefaut = $cBordSurvol
   Remplir-Bios
   try { [void][LkNative]::SetWindowTheme($log.Handle, $(if ($clair) { "Explorer" } else { "DarkMode_Explorer" }), $null) } catch {}
   [LkBadge]::Light = $clair
   if ($script:pageActive) { Afficher $script:pageActive -Forcer }
   try { Maj-Alertes } catch {}
   Enregistrer-Pref "Theme" $(if ($clair) { "clair" } else { "sombre" })
+  } finally { [LkCard]::Instant = $false; Geler $f $false }
   $f.Invalidate($true)
   Log "Thème $(if ($clair) { 'clair' } else { 'sombre' }) activé."
 }
@@ -2660,7 +3562,7 @@ function Tout-Annuler {
 
 # ===================== MISE À JOUR DE L'APPLI =====================
 # Vérification en arrière-plan (jamais bloquante, jamais d'erreur au démarrage si hors ligne)
-$etatMaj = [hashtable]::Synchronized(@{ Statut = ""; Version = ""; Url = ""; Notes = ""; Fichier = ""; Erreur = ""; Sha256 = "" })
+$etatMaj = [hashtable]::Synchronized(@{ Statut = ""; Version = ""; Build = ""; Source = ""; Url = ""; Notes = ""; Fichier = ""; Erreur = ""; Sha256 = "" })
 # v5.6 : https obligatoire (version.json ET zip), délai court, empreinte SHA-256 vérifiée si version.json la donne,
 # toutes les erreurs restent dans le fil d'arrière-plan (jamais d'exception sur l'interface)
 function Url-Https($u) { $x = $null; return ([Uri]::TryCreate("$u".Trim(), [UriKind]::Absolute, [ref]$x) -and $x.Scheme -eq "https") }
@@ -2669,43 +3571,115 @@ function Url-MiseAJour {
   try { $cf = Join-Path $env:ProgramData "Lukzyr\config.json"; if (Test-Path $cf) { $j = Get-Content $cf -Raw | ConvertFrom-Json; if ($j.urlMiseAJour) { $u = "$($j.urlMiseAJour)" } } } catch {}
   return "$u".Trim()
 }
+$script:travauxMaj = New-Object System.Collections.ArrayList
 function Lancer-Arriere($bloc, $arguments) {
   try {
     $rs = [runspacefactory]::CreateRunspace(); $rs.Open(); $rs.SessionStateProxy.SetVariable("etat", $etatMaj)
     $psA = [powershell]::Create(); $psA.Runspace = $rs; [void]$psA.AddScript($bloc)
     foreach ($arg in $arguments) { [void]$psA.AddArgument($arg) }
-    [void]$psA.BeginInvoke()
+    [void]$script:travauxMaj.Add(@{ PS = $psA; H = $psA.BeginInvoke() })
+    $tMaj.Start()
   } catch { $etatMaj.Statut = "erreur"; $etatMaj.Erreur = $_.Exception.Message }
+}
+# v5.7 : fonctions communes aux deux lectures (exécutées dans le fil d'arrière-plan)
+$codeReseauMaj = {
+  # TLS 1.2 ajouté (sans retirer TLS 1.3 s'il existe) : PowerShell 5.1 propose parfois encore TLS 1.0 seul
+  try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 }
+  function Lire-Https($url, $accept) {
+    $rq = [Net.HttpWebRequest]::Create($url); $rq.Timeout = 10000; $rq.ReadWriteTimeout = 10000; $rq.AllowAutoRedirect = $true
+    $rq.UserAgent = "LuKZyR-Optimisation"   # obligatoire pour l'API GitHub
+    if ($accept) { $rq.Accept = $accept }
+    $rq.Headers.Add("Cache-Control", "no-cache")
+    try { $rq.Proxy = [Net.WebRequest]::GetSystemWebProxy(); $rq.Proxy.Credentials = [Net.CredentialCache]::DefaultCredentials } catch {}
+    $rp = $rq.GetResponse()
+    try {
+      if ($rp.ResponseUri.Scheme -ne "https") { throw "redirection hors https refusée" }
+      $sr = New-Object IO.StreamReader($rp.GetResponseStream(), [Text.Encoding]::UTF8); $txt = $sr.ReadToEnd(); $sr.Close()
+    } finally { $rp.Close() }
+    if ($txt.Length -gt 262144) { throw "réponse trop grosse" }
+    return $txt
+  }
+  # message clair en français à partir de l'erreur réseau
+  function Raison($ex) {
+    $e = $ex; while ($e.InnerException -and -not ($e -is [Net.WebException])) { $e = $e.InnerException }
+    if ($e -is [Net.WebException]) {
+      $code = 0; try { if ($e.Response) { $code = [int]$e.Response.StatusCode } } catch {}
+      switch ("$($e.Status)") {
+        "NameResolutionFailure" { return "pas de connexion Internet (adresse introuvable)" }
+        "Timeout" { return "le serveur n'a pas répondu en 10 s" }
+        "ConnectFailure" { return "serveur injoignable (pare-feu, proxy ou antivirus ?)" }
+        "TrustFailure" { return "connexion sécurisée refusée (date et heure du PC, ou antivirus qui inspecte le HTTPS ?)" }
+        "SecureChannelFailure" { return "connexion sécurisée (TLS 1.2) impossible" }
+        "ProtocolError" {
+          if ($code -eq 404) { return "fichier introuvable sur GitHub (404)" }
+          if ($code -eq 403 -or $code -eq 429) { return "GitHub limite les vérifications pour l'instant ($code), réessaie dans une heure" }
+          return "réponse du serveur : erreur $code"
+        }
+      }
+    }
+    for ($x = $ex; $x; $x = $x.InnerException) {
+      if ($x -is [Net.Sockets.SocketException]) { return "pas de connexion Internet ou serveur injoignable" }
+      if ($x -is [Security.Authentication.AuthenticationException]) { return "connexion sécurisée (TLS) impossible : date et heure du PC, ou antivirus qui inspecte le HTTPS ?" }
+      if ($x -is [TimeoutException]) { return "le serveur n'a pas répondu en 10 s" }
+    }
+    if ($e -is [Net.WebException]) { return "$($e.Message)" }
+    return "$($ex.Message)"
+  }
+  # versions « 0.1 », « 0.1.2 », « v0.2 bêta », « LuKZyR Optimisation v0.1 beta » ; une finale passe avant la bêta du même numéro
+  function Num($v) { $m = [regex]::Match("$v", '\d+(\.\d+){0,3}'); if (-not $m.Success) { return $null }; $x = $m.Value; while (($x -split '\.').Count -lt 3) { $x += ".0" }; try { [version]$x } catch { $null } }
+  function Beta($v) { "$v" -match '(?i)b[eêè]ta|alpha|\brc\d*\b|pre' }
+  function Comparer($vd, $bd, $vl, $bl, $betaL) {
+    $nd = Num $vd; $nl = Num $vl
+    if (-not $nd) { return "illisible" }
+    if ($nd -gt $nl) { return "dispo" }
+    if ($nd -lt $nl) { return "ajour" }
+    if ($betaL -and -not (Beta $vd)) { return "dispo" }          # 0.1 finale > 0.1 bêta
+    # v5.7 : même version publique (v0.1 bêta pour tous les builds) : on compare le build interne (5.6, 5.7...)
+    $bD = Num $bd; $bL = Num $bl
+    if ($bD -and $bL -and $bD -gt $bL) { return "dispo" }
+    return "ajour"
+  }
 }
 function Verifier-MiseAJour {
   $u = Url-MiseAJour
   if (-not $u) { $etatMaj.Statut = "aucun"; Maj-AffichageMaj; return }
   if (-not (Url-Https $u)) { $etatMaj.Statut = "erreur"; $etatMaj.Erreur = "adresse refusée (https obligatoire) : $u"; Maj-AffichageMaj; return }
-  $etatMaj.Statut = "verif"; Maj-AffichageMaj
-  Lancer-Arriere {
-    param($url, $versionApp, $betaApp)
+  if ($etatMaj.Statut -in @("verif", "telechargement")) { return }
+  $etatMaj.Statut = "verif"; $etatMaj.Erreur = ""; $etatMaj.Build = ""; $etatMaj.Source = ""; Maj-AffichageMaj
+  $bloc = [scriptblock]::Create($codeReseauMaj.ToString() + "`n" + {
+    $url, $urlRel, $versionApp, $betaApp, $buildApp = $args   # (param() impossible : le bloc commence par les fonctions communes)
+    $raisons = @()
+    function Verifier-Lien($l) { $ux = $null; return ([Uri]::TryCreate("$l", [UriKind]::Absolute, [ref]$ux) -and $ux.Scheme -eq "https" -and $ux.AbsolutePath -match '\.zip$') }
+    # 1. version.json du dépôt
     try {
-      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-      $rq = [Net.HttpWebRequest]::Create($url); $rq.Timeout = 10000; $rq.ReadWriteTimeout = 10000; $rq.UserAgent = "LuKZyROptimisation"; $rq.AllowAutoRedirect = $true
-      $rp = $rq.GetResponse()
+      $j = (Lire-Https $url "application/json") | ConvertFrom-Json
+      $v = "$($j.version)"; $b = "$($j.build)"; $lien = "$($j.url)".Trim(); $sha = ("$($j.sha256)" -replace '\s', '').ToLower()
+      if (-not (Verifier-Lien $lien)) { throw "lien de téléchargement refusé dans version.json (https et .zip obligatoires)" }
+      if ($sha -and $sha -notmatch '^[0-9a-f]{64}$') { throw "empreinte sha256 illisible dans version.json" }
+      $r = Comparer $v $b $versionApp $buildApp $betaApp
+      if ($r -eq "illisible") { throw "numéro de version illisible dans version.json : $v" }
+      $etat.Version = $v; $etat.Build = $b; $etat.Url = $lien; $etat.Notes = "$($j.notes)"; $etat.Sha256 = $sha; $etat.Source = "version.json"; $etat.Statut = $r
+      return
+    } catch { $raisons += "version.json : " + (Raison $_.Exception) }
+    # 2. releases GitHub (titre ou tag « v0.1 beta », fichier .zip joint)
+    if ($urlRel) {
       try {
-        if ($rp.ResponseUri.Scheme -ne "https") { throw "redirection hors https refusée" }
-        $sr = New-Object IO.StreamReader($rp.GetResponseStream(), [Text.Encoding]::UTF8); $txt = $sr.ReadToEnd(); $sr.Close()
-      } finally { $rp.Close() }
-      if ($txt.Length -gt 65536) { throw "version.json trop gros" }
-      $j = $txt | ConvertFrom-Json
-      $etat.Version = "$($j.version)"; $etat.Url = "$($j.url)".Trim(); $etat.Notes = "$($j.notes)"; $etat.Sha256 = ("$($j.sha256)" -replace '\s', '').ToLower()
-      $ux = $null
-      if (-not ([Uri]::TryCreate($etat.Url, [UriKind]::Absolute, [ref]$ux) -and $ux.Scheme -eq "https" -and $ux.AbsolutePath -match '\.zip$')) { $etat.Url = ""; throw "lien de téléchargement refusé (https et .zip obligatoires)" }
-      if ($etat.Sha256 -and $etat.Sha256 -notmatch '^[0-9a-f]{64}$') { $etat.Url = ""; throw "empreinte sha256 illisible" }
-      # v0.1 : versions du type « 0.1 », « 0.1.2 », « 0.2-beta », « v0.2 bêta » ; une finale passe avant la bêta du même numéro
-      function Num($v) { $m = [regex]::Match("$v", '\d+(\.\d+){0,3}'); if (-not $m.Success) { return $null }; $x = $m.Value; while (($x -split '\.').Count -lt 3) { $x += ".0" }; [version]$x }
-      function Beta($v) { "$v" -match '(?i)b[eê]ta|alpha|rc|pre' }
-      $nd = Num $etat.Version; $nl = Num $versionApp
-      $etat.Statut = if (-not $nd) { "erreur" } elseif ($nd -gt $nl) { "dispo" } elseif ($nd -eq $nl -and $betaApp -and -not (Beta $etat.Version)) { "dispo" } else { "ajour" }
-      if (-not $nd) { $etat.Erreur = "version illisible : $($etat.Version)" }
-    } catch { $etat.Statut = "erreur"; $etat.Erreur = $_.Exception.Message }
-  } @($u, $VersionApp, $VersionBeta)
+        $rels = @((Lire-Https $urlRel "application/vnd.github+json") | ConvertFrom-Json) | Where-Object { $_ -and -not $_.draft }
+        $rel = $null; foreach ($x in $rels) { if (Num "$($x.name) $($x.tag_name)") { $rel = $x; break } }
+        if (-not $rel) { throw "aucune release avec un numéro de version" }
+        $nomV = if (Num "$($rel.name)") { "$($rel.name)" } else { "$($rel.tag_name)" }
+        $zip = @($rel.assets | Where-Object { "$($_.name)" -match '\.zip$' -and "$($_.browser_download_url)" -match '^https://' }) | Select-Object -First 1
+        $r = Comparer $nomV "" $versionApp $buildApp $betaApp
+        $etat.Version = ("$nomV" -replace '(?i)^.*?(v?\d+(\.\d+){0,3}.*)$', '$1').Trim(); $etat.Build = ""; $etat.Notes = "$($rel.body)"; $etat.Sha256 = ""; $etat.Source = "releases"
+        $etat.Url = if ($zip) { "$($zip.browser_download_url)" } else { "" }
+        if ($r -eq "dispo" -and -not $etat.Url) { $r = "ajour"; $raisons += "release sans fichier .zip" }
+        $etat.Statut = $r
+        return
+      } catch { $raisons += "releases GitHub : " + (Raison $_.Exception) }
+    }
+    $etat.Statut = "erreur"; $etat.Erreur = ($raisons -join " ; ")
+  }.ToString())
+  Lancer-Arriere $bloc @($u, $(if ($u -eq $UrlMiseAJourDefaut) { $UrlReleasesDefaut } else { "" }), $VersionApp, $VersionBeta, $VersionInterne)
 }
 function Telecharger-MiseAJour {
   try {
@@ -2715,12 +3689,12 @@ function Telecharger-MiseAJour {
     if ($nomZip -notmatch '\.zip$') { $nomZip = "LuKZyR-Optimisation-v$($etatMaj.Version -replace '[^\w\.\-]', '_').zip" }
     $etatMaj.Fichier = Join-Path $bureau $nomZip; $etatMaj.Statut = "telechargement"; Maj-AffichageMaj
   } catch { $etatMaj.Statut = "erreur"; $etatMaj.Erreur = $_.Exception.Message; Maj-AffichageMaj; return }
-  Lancer-Arriere {
-    param($url, $dest, $sha)
+  $blocT = [scriptblock]::Create($codeReseauMaj.ToString() + "`n" + {
+    $url, $dest, $sha = $args
     $tmp = "$dest.part"
     try {
-      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-      $rq = [Net.HttpWebRequest]::Create($url); $rq.Timeout = 15000; $rq.ReadWriteTimeout = 30000; $rq.UserAgent = "LuKZyROptimisation"
+      $rq = [Net.HttpWebRequest]::Create($url); $rq.Timeout = 15000; $rq.ReadWriteTimeout = 30000; $rq.UserAgent = "LuKZyR-Optimisation"
+      try { $rq.Proxy = [Net.WebRequest]::GetSystemWebProxy(); $rq.Proxy.Credentials = [Net.CredentialCache]::DefaultCredentials } catch {}
       $rp = $rq.GetResponse()
       try {
         if ($rp.ResponseUri.Scheme -ne "https") { throw "redirection hors https refusée" }
@@ -2733,30 +3707,59 @@ function Telecharger-MiseAJour {
       }
       Move-Item -LiteralPath $tmp -Destination $dest -Force
       $etat.Statut = "telecharge"
-    } catch { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue; $etat.Statut = "erreur"; $etat.Erreur = $_.Exception.Message }
-  } @($etatMaj.Url, $etatMaj.Fichier, $etatMaj.Sha256)
+    } catch { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue; $etat.Statut = "erreur"; $etat.Erreur = "téléchargement : " + (Raison $_.Exception) }
+  }.ToString())
+  Lancer-Arriere $blocT @($etatMaj.Url, $etatMaj.Fichier, $etatMaj.Sha256)
 }
 # Bandeau « nouvelle version » (en haut à droite)
 $banniere = New-Object LkCard; $banniere.Fill = $cNavActif; $banniere.Radius = S 12; $banniere.Location = Pt 636 14; $banniere.Size = Sz 332 56; $banniere.Visible = $false; $script:banniereOn = $false
 $lBan = Lbl $banniere "" 14 8 170 40 (Police 12 "Bold") $cBlanc $cNavActif
 $bBan = New-Object LkButton; $bBan.Text = (T "Télécharger"); $bBan.Font = Police 12 "Bold"; $bBan.Radius = S 10
-$bBan.Location = Pt 190 10; $bBan.Size = Sz 130 36; $bBan.Fill = $cAccent; $bBan.HoverFill = Hex "#7a40ee"
+$bBan.Location = Pt 190 10; $bBan.Size = Sz 130 36; $bBan.Fill = $cAccent; $bBan.Fill2 = $cAccent2; $bBan.HoverFill = Hex "#7a40ee"
 $banniere.Controls.Add($bBan); $main.Controls.Add($banniere); $banniere.BringToFront()
 $bBan.Add_Click({ if ($etatMaj.Statut -eq "telecharge") { Start-Process explorer.exe "/select,`"$($etatMaj.Fichier)`"" } elseif ($etatMaj.Statut -eq "dispo") { Telecharger-MiseAJour } })
 $script:statutVu = ""
+# v5.7 : raisons d'échec de la mise à jour traduites morceau par morceau (elles viennent du fil d'arrière-plan)
+$fragmentsMaj = @(
+  'connexion sécurisée (TLS) impossible : date et heure du PC, ou antivirus qui inspecte le HTTPS ?',
+  'connexion sécurisée refusée (date et heure du PC, ou antivirus qui inspecte le HTTPS ?)',
+  'lien de téléchargement refusé dans version.json (https et .zip obligatoires)',
+  'pas de connexion Internet ou serveur injoignable',
+  'serveur injoignable (pare-feu, proxy ou antivirus ?)',
+  'pas de connexion Internet (adresse introuvable)',
+  'numéro de version illisible dans version.json',
+  'empreinte sha256 illisible dans version.json',
+  'GitHub limite les vérifications pour l''instant',
+  'aucune release avec un numéro de version',
+  'connexion sécurisée (TLS 1.2) impossible',
+  'le serveur n''a pas répondu en 10 s',
+  'fichier introuvable sur GitHub (404)',
+  'adresse refusée (https obligatoire)',
+  'réponse du serveur : erreur',
+  'réessaie dans une heure',
+  'release sans fichier .zip',
+  'réponse trop grosse',
+  'releases GitHub',
+  'téléchargement'
+)
+function Trad-Raison($s) { $s = "$s"; if ($script:langue -ne "en") { return $s }; foreach ($k in $fragmentsMaj) { $s = $s.Replace($k, (T $k)) }; return $s }
 function Maj-AffichageMaj {
   $st = $etatMaj.Statut
   $txt = switch ($st) {
     "aucun" { T "Aucun serveur de mise à jour configuré." }
     "verif" { T "Vérification en cours..." }
-    "ajour" { (T "Tu as la dernière version") + " ($(Version-Affichee))." }
-    "dispo" { (T "Nouvelle version disponible") + " : $($etatMaj.Version)" }
+    "ajour" { (T "Tu as la dernière version") + " ($(Version-Affichee), build $VersionInterne)." }
+    "dispo" { (T "Nouvelle version disponible") + " : $($etatMaj.Version)" + $(if ($etatMaj.Build) { " (build $($etatMaj.Build))" } else { "" }) }
     "telechargement" { T "Téléchargement en cours..." }
     "telecharge" { (T "Téléchargée sur le Bureau") + " : $([IO.Path]::GetFileName($etatMaj.Fichier))" }
-    "erreur" { T "Pas de connexion au serveur de mise à jour (l'appli marche normalement)." }
+    "erreur" { (T "Vérification impossible") + " : $(Trad-Raison $etatMaj.Erreur). " + (T "L'appli marche normalement.") }
     default { "" }
   }
-  if ($txt) { $oMaj.Desc.Text = $txt }
+  if ($txt) { $oMaj.Desc.Text = $txt; $oMaj.Desc.ForeColor = $(switch ($st) { "dispo" { $cAccentClair } "erreur" { $cOrange } "ajour" { $cVert } default { $cGris } }); $tip.SetToolTip($oMaj.Desc, $txt) }
+  $bMajVerif.Enabled = ($st -notin @("verif", "telechargement"))
+  # v5.7 : runspaces terminés libérés ; minuteur arrêté quand rien n'est en cours (avant : 1 tic par seconde, à vie)
+  foreach ($j in @($script:travauxMaj)) { if ($j.H.IsCompleted) { try { $j.PS.Runspace.Close(); $j.PS.Dispose() } catch {}; [void]$script:travauxMaj.Remove($j) } }
+  if ($st -notin @("verif", "telechargement") -and -not $script:travauxMaj.Count) { $tMaj.Stop() }
   if ($st -in @("dispo", "telechargement", "telecharge")) {
     $lBan.Text = $(switch ($st) { "dispo" { (T "Version") + " $($etatMaj.Version) " + (T "disponible") } "telechargement" { T "Téléchargement..." } default { T "Zip enregistré sur le Bureau" } })
     $bBan.Text = $(if ($st -eq "telecharge") { T "Ouvrir" } else { T "Télécharger" }); $bBan.Enabled = ($st -ne "telechargement")
@@ -2765,7 +3768,7 @@ function Maj-AffichageMaj {
   if ($st -ne $script:statutVu) {
     $script:statutVu = $st
     if ($st -in @("dispo", "telechargement", "telecharge")) { try { Maj-Alertes } catch {} }
-    if ($st -eq "erreur") { Log "Mise à jour : serveur injoignable ($($etatMaj.Erreur))." } elseif ($st -eq "telecharge") { Log "Mise à jour téléchargée : $($etatMaj.Fichier)"; Start-Process explorer.exe "/select,`"$($etatMaj.Fichier)`"" } elseif ($txt -and $st -ne "verif") { Log "Mise à jour : $txt" }
+    if ($st -eq "erreur") { Log "Mise à jour : vérification impossible ($($etatMaj.Erreur))." } elseif ($st -eq "telecharge") { Log "Mise à jour téléchargée : $($etatMaj.Fichier)"; Start-Process explorer.exe "/select,`"$($etatMaj.Fichier)`"" } elseif ($txt -and $st -ne "verif") { Log "Mise à jour : $txt" }
   }
 }
 $tMaj = New-Object Windows.Forms.Timer; $tMaj.Interval = 1000; $tMaj.Add_Tick({ Maj-AffichageMaj })
@@ -2777,16 +3780,16 @@ function Sans-Accents($t) {
   $n = "$t".ToLowerInvariant().Normalize([Text.NormalizationForm]::FormD)
   return (-join ($n.ToCharArray() | Where-Object { [Globalization.CharUnicodeInfo]::GetUnicodeCategory($_) -ne "NonSpacingMark" }))
 }
-$rech = New-Object LkCard; $rech.Fill = $cCarte; $rech.HoverFill = $cCarteSurvol; $rech.Radius = S 10; $rech.Location = Pt 700 18; $rech.Size = Sz 268 36; $rech.Visible = $false
-$main.Controls.Add($rech)
+$rech = New-Object LkCard; $rech.Fill = $cCarte; $rech.HoverFill = $cCarteSurvol; $rech.Radius = S 10; $rech.Location = Pt 16 72; $rech.Size = Sz 200 36
+$nav.Controls.Add($rech)   # v5.8 : dans la barre latérale, toujours visible
 $rIc = Icone $rech "search" 9 0 24 36 16 $cGris $cCarte
 $tbRech = New-Object Windows.Forms.TextBox; $tbRech.BorderStyle = "None"; $tbRech.BackColor = $cCarte; $tbRech.ForeColor = $cBlanc; $tbRech.Font = Police 12.5
-$tbRech.Location = Pt 38 9; $tbRech.Size = Sz 220 20
+$tbRech.Location = Pt 36 9; $tbRech.Size = Sz 156 20
 $rech.Controls.Add($tbRech)
-$rPh = Lbl $rech "Rechercher un réglage (Ctrl+F)" 38 0 222 36 (Police 12) $cGris2 $cCarte; $rPh.TextAlign = "MiddleLeft"; $rPh.Cursor = "IBeam"
+$rPh = Lbl $rech "Rechercher (Ctrl+F)" 36 0 158 36 (Police 12) $cGris2 $cCarte; $rPh.TextAlign = "MiddleLeft"; $rPh.Cursor = "IBeam"
 $rPh.Add_Click({ $tbRech.Focus() }); $rIc.Add_Click({ $tbRech.Focus() })
 $rPh.BringToFront()
-$script:listeRech = New-Object LkCard; $script:listeRech.Fill = $cCarteSurvol; $script:listeRech.Radius = S 10; $script:listeRech.Location = Pt 700 58; $script:listeRech.Size = Sz 268 40; $script:listeRech.Visible = $false
+$script:listeRech = New-Object LkCard; $script:listeRech.Fill = $cCarteSurvol; $script:listeRech.Radius = S 10; $script:listeRech.Location = Pt 12 16; $script:listeRech.Size = Sz 268 40; $script:listeRech.Visible = $false
 $main.Controls.Add($script:listeRech)
 $script:resultats = @()
 function Page-De($ctrl) {
@@ -2809,7 +3812,7 @@ function Index-Recherche {
   return $l
 }
 function Chercher($texte) {
-  $lr = $script:listeRech; $lr.Controls.Clear(); $script:resultats = @()
+  $lr = $script:listeRech; Vider $lr; $script:resultats = @()
   $q = (Sans-Accents $texte).Trim()
   if ($q.Length -lt 2) { $lr.Visible = $false; return }
   if (-not $script:index) { $script:index = Index-Recherche }
@@ -2835,6 +3838,7 @@ function Aller-A($e) {
   if (-not $e) { return }
   $script:listeRech.Visible = $false; $tbRech.Text = ""
   Afficher $e.Page
+  [LkFade]::StopAll()   # v5.7 : on va défiler jusqu'au réglage : pas d'instantané de l'ancienne position
   if ($e.Ctrl) {
     $carte = $e.Ctrl.Parent; $panneau = $pages[$e.Page].Panel
     if ($panneau -is [LkScroll]) { $panneau.ScrollTo([math]::Max(0, $carte.Top - (S 36))) }
@@ -2855,7 +3859,6 @@ $tCacheRech.Add_Tick({ $tCacheRech.Stop(); if (-not $tbRech.Focused) { $script:l
 $f.Add_KeyDown({
   if ($_.Control -and $_.KeyCode -eq "F") {
     $_.SuppressKeyPress = $true
-    if ($script:pageActive -eq "accueil") { Afficher-Groupe "performance" }
     $tbRech.Focus(); $tbRech.SelectAll()
   }
 })
@@ -2866,6 +3869,11 @@ foreach ($k in @($pages.Keys)) { $p = $pages[$k].Panel; if ($p -is [LkScroll]) {
 $f.Add_Shown({ foreach ($k in @($pages.Keys)) { $p = $pages[$k].Panel; if ($p -is [LkScroll]) { $p.Recalc() } }; MajStats })
 $f.Add_FormClosing({
   if ([LkAnim]::Closing) { return }   # 2e passage, après le fondu
+  if ((Session-Active) -and -not $TestAuto -and -not $env:LK_TEST) {
+    $rs = Boite ((T "Une session de jeu est en cours.") + "`n`n" + (T "La terminer maintenant (relancer les applis fermées, remettre le plan d'alimentation) ?") + "`n`n" + (T "Non = la garder : elle sera proposée au prochain lancement.")) "YesNoCancel" "Question"
+    if ("$rs" -eq "Cancel") { $_.Cancel = $true; return }
+    if ("$rs" -eq "Yes") { try { Terminer-Session } catch {} }
+  }
   if (-not $env:LK_TEST -and -not $TestAuto) {
     if ($script:pageActive) { Enregistrer-Pref "DernierePage" $script:pageActive }
     if ($f.WindowState -eq "Normal") { Enregistrer-Pref "FenetreX" "$($f.Left)"; Enregistrer-Pref "FenetreY" "$($f.Top)" }
@@ -2895,12 +3903,21 @@ $script:fActive = $true
 function Maj-PauseAnim { [LkAnim]::Pause = ($f.WindowState -eq "Minimized") -or -not $script:fActive }
 $f.Add_Activated({ $script:fActive = $true; Maj-PauseAnim })
 $f.Add_Deactivate({ $script:fActive = $false; Maj-PauseAnim })
-$f.Add_Resize({ Maj-PauseAnim })
+$f.Add_Resize({ Maj-PauseAnim; try { Maj-Moniteur } catch {} })
+$tSessionRestee = New-Object Windows.Forms.Timer; $tSessionRestee.Interval = 1800
+$tSessionRestee.Add_Tick({
+  $tSessionRestee.Stop()
+  if (-not (Session-Active) -or $TestAuto -or $env:LK_TEST) { return }
+  $e = Lire-Session
+  $msg = (T "Une session de jeu n'a pas été terminée") + $(if ($e.Debut) { " (" + ((T "démarrée le {0}") -f ([datetime]"$($e.Debut)").ToString("dd/MM HH:mm")) + ")" } else { "" }) + ".`n`n" + (T "La terminer maintenant (relancer les applis fermées, remettre le plan d'alimentation) ?")
+  if ((Boite $msg "YesNo" "Question") -eq "Yes") { Terminer-Session } else { Maj-Session }
+})
+$f.Add_Shown({ $tSessionRestee.Start(); try { Maj-Moniteur } catch {} })
 # Mise à jour : vérifiée 1,5 s après l'ouverture, en arrière-plan
 $f.Add_Shown({ $tMaj.Start(); Verifier-MiseAJour })
 # Alertes du Tableau de bord : lues juste après l'ouverture (sans retarder l'affichage)
 $tAlertes = New-Object Windows.Forms.Timer; $tAlertes.Interval = 400
-$tAlertes.Add_Tick({ $tAlertes.Stop(); try { Maj-Alertes } catch { Log "Alertes : $($_.Exception.Message)" } })
+$tAlertes.Add_Tick({ $tAlertes.Stop(); try { Maj-Alertes } catch { Log "Alertes : $($_.Exception.Message)" }; try { Maj-Score } catch { Log "Score : $($_.Exception.Message)" } })
 $f.Add_Shown({ $tAlertes.Start() })
 MajCompteur
 Log "LuKZyR Optimisation $(Version-Affichee) (build $VersionInterne) - matériel détecté : $cpuNom / $(if ($gpuNom) { $gpuNom } else { 'GPU non détecté' })"
