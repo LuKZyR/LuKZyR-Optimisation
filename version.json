@@ -3,5 +3,5 @@
   "build": "5.11",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
   "notes": "v0.1 bêta (build 5.11) : les réglages protégés par Windows 11 (widgets, fil d'actualités) sont signalés « ignoré » au lieu d'une erreur, avec un réglage de repli pour masquer les widgets.",
-  "sha256": "c29372fec56634ce14a51672fc63c24ce0fd9a096f5192fc54ebdbebef70b4c5"
+  "sha256": "51bf31a3911af8760d6e9e8b4a39eeea3802d88fe149dd8a85cee7d38a48131f"
 }
