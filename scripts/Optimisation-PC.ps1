@@ -183,7 +183,7 @@ if ($NettoyageTemp) {
   }
   foreach ($d in $dossiers) { Vider-Dossier $d }
   $gain = 0; foreach ($l in $lecteurs) { $gain += ((Get-PSDrive $l).Free - $avant[$l]) }
-  $gain = [math]::Max(0, [math]::Round($gain / 1MB))
+  $gain = [math]::Max(0.0, [math]::Round($gain / 1MB))
   Ok "Fichiers temporaires supprimés ($gain Mo libérés ; les fichiers en cours d'utilisation sont ignorés)."
 }
 

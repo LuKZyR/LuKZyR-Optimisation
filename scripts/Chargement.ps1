@@ -99,7 +99,7 @@ $codeChargement = {
     if ($p0 -ne $st.PctVu) { $st.PctVu = $p0; $st.Depuis = $t }
     # pendant une étape, on avance doucement vers la fin de l'étape (sans jamais l'atteindre avant qu'elle soit finie)
     $cible = if ($chg.Fin) { 100 } else { $p0 + ($p1 - $p0) * 0.92 * (1 - [math]::Exp(-($t - $st.Depuis) / 3.0)) }
-    if ($cible -gt $st.Aff) { $st.Aff += ($cible - $st.Aff) * [math]::Min(1, $dt * 7) }
+    if ($cible -gt $st.Aff) { $st.Aff += ($cible - $st.Aff) * [math]::Min(1.0, $dt * 7) }
     if ($chg.Ferme -or $t -gt 600) { $tm.Stop(); $f.Close(); return }
     if ($chg.Fin) { if ($st.FinT -lt 0) { $st.FinT = $t }; if ($t - $st.FinT -gt 4) { $tm.Stop(); $f.Close(); return } }
     if ($chg.Fin -and $st.Aff -gt 99) { $st.Aff = 100; if ($chg.Pret -or ($st.FinT -ge 0 -and $t - $st.FinT -gt 2.5)) { $st.Fondu = $true } }

@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.14)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.15)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.14
-$VersionInterne = "5.14"   # comparé comme [version] : 5.14 > 5.13 > 5.12 > 5.11 > 5.10
+$VersionBeta = $true         # v0.1 bêta = version interne 5.15
+$VersionInterne = "5.15"   # comparé comme [version] : 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -65,7 +65,30 @@ Demarrer-Chargement (Split-Path -Parent (Split-Path -Parent $PSCommandPath)) $Ve
 #        (en v5.7/5.8, l'avertissement CS1690 sur LkHero.Fill bloquait toute l'interface au démarrage).
 #        Les vraies erreurs sont gardées (-ErrorVariable / catch) et écrites dans plantage-demarrage.txt.
 $erreursCompil = @(); $exceptionCompil = $null
-try { Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -IgnoreWarnings -ErrorAction SilentlyContinue -ErrorVariable erreursCompil -TypeDefinition @"
+# v5.15 : la détection du matériel (WMI, disques) part TOUT DE SUITE dans un fil séparé, en même temps que la
+#         préparation de l'interface ; elle était faite ensuite, l'une après l'autre (1 à 3 s de plus au démarrage).
+$script:preLecture = $null; $script:preRes = $null
+if (-not $env:LK_SIMU_RAPIDE) {
+  try {
+    $rsPre = [runspacefactory]::CreateRunspace(); $rsPre.Open()
+    $psPre = [powershell]::Create(); $psPre.Runspace = $rsPre
+    [void]$psPre.AddScript({
+      $r = @{}
+      function L($k, [scriptblock]$c) { try { $ErrorActionPreference = "Stop"; $r[$k] = @{ Ok = $true; V = @(& $c) } } catch { $r[$k] = @{ Ok = $false; E = "$($_.Exception.Message)" } } }
+      L "processeur" { Get-CimInstance Win32_Processor | Select-Object -First 1 }
+      L "carte graphique" { Get-CimInstance Win32_VideoController }
+      L "carte mère" { Get-CimInstance Win32_BaseBoard }
+      L "BIOS" { Get-CimInstance Win32_BIOS }
+      L "mémoire" { Get-CimInstance Win32_PhysicalMemory }
+      L "Windows" { Get-CimInstance Win32_OperatingSystem }
+      L "disques" { Get-PhysicalDisk }
+      , $r
+    })
+    $script:preLecture = @{ PS = $psPre; H = $psPre.BeginInvoke() }
+  } catch { $script:preLecture = $null }
+}
+$swCompil = [Diagnostics.Stopwatch]::StartNew()
+$codeUi = @"
 using System; using System.Drawing; using System.Drawing.Drawing2D; using System.Drawing.Text; using System.Windows.Forms;
 using System.Runtime.InteropServices; using System.Collections.Concurrent; using System.Collections.Generic; using System.Diagnostics; using System.Text;
 
@@ -160,6 +183,7 @@ public static class LkNative {
       return new int[] { cur, max };
     } catch { return new int[] { 0, 0 }; }
   }
+  public static int FrequenceActuelle() { try { DEVMODE d = new DEVMODE(); d.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE)); return EnumDisplaySettings(null, -1, ref d) ? d.dmDisplayFrequency : 0; } catch { return 0; } }   // v5.15
   public static bool SystemAnimations() { int v = 1; try { if (SystemParametersInfo(0x1042, 0, ref v, 0)) return v != 0; } catch { } return true; }
   public static int RamLoad() { MEMSTAT m = new MEMSTAT(); return GlobalMemoryStatusEx(m) ? (int)m.dwMemoryLoad : -1; }
   // Gèle / dégèle le dessin d'un conteneur (WM_SETREDRAW) : échange de pages en une seule image
@@ -197,7 +221,19 @@ public static class LkAnim {
   public static bool Actif { get { return t != null && t.Enabled; } }
   public static int NbJobs { get { return jobs.Count; } }
   public static int NbBoucles { get { return boucles.Count; } }
-  static void Demarrer() { if (t == null) { t = new Timer(); t.Interval = 16; t.Tick += Tick; } if (!t.Enabled) t.Start(); }
+  // v5.15 : minuteur PRÉCIS pendant les animations seulement. Le minuteur Windows avance par pas de 15,6 ms :
+  // « 16 ms » tombait en réalité à 31 ms (environ 32 images/s, saccadé). timeBeginPeriod(1) le temps d'une
+  // animation, rendu dès qu'elle finit (aucun coût au repos), et intervalle calé sur la fréquence de l'écran.
+  [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint p);
+  [DllImport("winmm.dll")] static extern uint timeEndPeriod(uint p);
+  static bool precis; public static int Intervalle = 15;
+  static void Precision(bool on) { if (on == precis) return; try { if (on) timeBeginPeriod(1); else timeEndPeriod(1); precis = on; } catch { } }
+  public static void Regler(int hz) { Intervalle = hz >= 100 ? 10 : (hz >= 50 ? Math.Max(10, 1000 / hz - 1) : 15); if (t != null) t.Interval = Intervalle; }
+  // mesure du rythme réel des images (tests et diagnostic) : écart moyen et pire écart entre deux images
+  static Stopwatch horloge = Stopwatch.StartNew(); static long derniere = -1; static double somme, pire; static long nbEcarts;
+  public static void RazMesure() { somme = 0; pire = 0; nbEcarts = 0; derniere = -1; }
+  public static string Mesure() { return nbEcarts == 0 ? "aucune image" : string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} images, ecart moyen {1:0.0} ms ({2:0} images/s), pire {3:0.0} ms", nbEcarts + 1, somme / nbEcarts, 1000.0 / (somme / nbEcarts), pire); }
+  static void Demarrer() { if (t == null) { t = new Timer(); t.Interval = Intervalle; t.Tick += Tick; } if (!t.Enabled) { Precision(true); derniere = -1; t.Start(); } }
   public static void Add(Func<bool> step) { jobs.Add(step); Demarrer(); }
   public static void AddLoop(Func<bool> step) { boucles.Add(step); if (!pause) Demarrer(); }
   static void Run(List<Func<bool>> l) {
@@ -209,9 +245,10 @@ public static class LkAnim {
   }
   static void Tick(object s, EventArgs e) {
     Images++;
+    long now = horloge.ElapsedTicks; if (derniere >= 0) { double ms = (now - derniere) * 1000.0 / Stopwatch.Frequency; somme += ms; nbEcarts++; if (ms > pire) pire = ms; } derniere = now;
     Run(jobs);
     if (!pause) Run(boucles);
-    if (jobs.Count == 0 && (boucles.Count == 0 || pause)) t.Stop();
+    if (jobs.Count == 0 && (boucles.Count == 0 || pause)) { t.Stop(); Precision(false); derniere = -1; }
   }
   // Apparition échelonnée : les éléments visibles d'une page montent de dy pixels, l'un après l'autre
   static int stTok;
@@ -284,8 +321,18 @@ public static class LkAnim {
     if (!On || Reduit) { c.Left = 0; return; }
     TweenQ(ms, p => { if (my == slideTok) c.Left = (int)Math.Round(dx * (1f - p)); }, () => { if (my == slideTok) c.Left = 0; });
   }
+  // v5.15 : un seul fondu de texte à la fois par contrôle (avant : en changeant vite de page, deux fondus se battaient
+  // sur le même titre = scintillement) ; la couleur n'est réécrite que si elle change (moins de repeints)
+  static Dictionary<Control, int> foreTok = new Dictionary<Control, int>();
   public static void FadeFore(Control c, Color from, Color to, int ms) {
-    Tween(ms, p => { c.ForeColor = Mix(from, to, p); }, null);
+    if (c == null) return;
+    int n; foreTok.TryGetValue(c, out n); int my = n + 1; foreTok[c] = my;
+    Tween(ms, p => {
+      int cur; if (!foreTok.TryGetValue(c, out cur) || cur != my) return;
+      if (c.IsDisposed) { foreTok.Remove(c); return; }
+      Color k = Mix(from, to, p); if (c.ForeColor.ToArgb() != k.ToArgb()) c.ForeColor = k;
+      if (p >= 1f) foreTok.Remove(c);
+    }, null);
   }
   // Indicateur de sélection qui glisse verticalement
   static int moveTok;
@@ -311,7 +358,7 @@ public static class LkAnim {
   // Nombre qui défile jusqu'à sa valeur (1er affichage des statistiques)
   public static void CountTo(Label l, int to, string suffix, int ms) {
     if (!On || Reduit) { l.Text = to.ToString() + suffix; return; }
-    Tween(ms, p => { l.Text = ((int)Math.Round(to * p)).ToString() + suffix; }, null);
+    Tween(ms, p => { string s = ((int)Math.Round(to * p)).ToString() + suffix; if (l.IsDisposed) return; if (l.Text != s) l.Text = s; }, null);   // v5.15 : texte réécrit seulement s'il change
   }
 }
 
@@ -367,7 +414,14 @@ public class LkCard : Panel {
     if (Instant || !IsHandleCreated || !Visible) { shown = to; hp = h1; Sync(); return; }
     LkAnim.Tween(160, p => { if (my != tok) return; shown = LkAnim.Mix(from, to, p); hp = h0 + (h1 - h0) * p; Sync(); }, null);
   }
-  void Sync() { Color c0 = CurrentFill; foreach (Control c in Controls) { if (c is Label) c.BackColor = c0; else c.Invalidate(); } Invalidate(); }
+  // v5.15 : les enfants ne sont touchés que si la couleur de fond change vraiment (avant : à chaque image,
+  // même quand seule la bordure glissait -> tous les textes de la carte repeints 60 fois par seconde)
+  Color synchro = Color.Empty;
+  void Sync() {
+    Color c0 = CurrentFill;
+    if (c0.ToArgb() != synchro.ToArgb() || synchro.IsEmpty) { synchro = c0; foreach (Control c in Controls) { if (c is Label) { if (c.BackColor.ToArgb() != c0.ToArgb()) c.BackColor = c0; } else c.Invalidate(); } }
+    Invalidate();
+  }
   protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
   protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
   void PeindreLk(PaintEventArgs e) {
@@ -882,7 +936,7 @@ public class LkPill : Control {
 // Gros bouton rond « OPTIMISER » : halo qui respire en continu, pulsation plus forte pendant l'exécution
 public class LkOrb : Control {
   public string Sub = ""; public Font SubFont; bool busy; float phase; float h; int tok; bool loop; Stopwatch sw = Stopwatch.StartNew(); int dots;
-  float ripple; float prog = -1f, progShown = -1f; int ptok;
+  float progShown = -1f; int ptok;   // v5.15 : champs jamais lus retirés (ripple, prog)
   // v5.8 : mode anneau de score (Score >= 0) : piste + arc dégradé cyan -> violet, grand nombre au centre.
   // Pendant OPTIMISER, l'arc montre la progression à la place du score.
   public float Score = -1f; float scoreShown = 0f; int stok; public Font SmallFont;
@@ -910,8 +964,8 @@ public class LkOrb : Control {
   }
   // v5.3 : anneau de progression autour du bouton (v < 0 : caché)
   public void SetProgress(float v) {
-    if (v < 0f) { ++ptok; prog = progShown = -1f; Invalidate(); return; }
-    v = Math.Min(1f, v); float from = progShown < 0f ? 0f : progShown; prog = v; int my = ++ptok;
+    if (v < 0f) { ++ptok; progShown = -1f; Invalidate(); return; }
+    v = Math.Min(1f, v); float from = progShown < 0f ? 0f : progShown; int my = ++ptok;
     LkAnim.Tween(420, p => { if (my != ptok) return; progShown = from + (v - from) * p; Invalidate(); }, null);
   }
   public LkOrb() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true); BackColor = Color.Transparent; Cursor = Cursors.Hand; }
@@ -922,7 +976,7 @@ public class LkOrb : Control {
     LkAnim.AddLoop(() => {
       if (IsDisposed || !Visible || !busy || !LkAnim.Boucles) { loop = false; phase = 0f; Invalidate(); return false; }
       long ms = sw.ElapsedMilliseconds; double per = busy ? 1100.0 : 2400.0;
-      phase = (float)(0.5 - 0.5 * Math.Cos(ms * 2 * Math.PI / per)); ripple = (float)((ms % 2800) / 2800.0); dots = (int)(ms / 400 % 4); Invalidate(); return true;
+      phase = (float)(0.5 - 0.5 * Math.Cos(ms * 2 * Math.PI / per)); dots = (int)(ms / 400 % 4); Invalidate(); return true;
     });
   }
   protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); if (Visible) Boucle(); }
@@ -1064,13 +1118,16 @@ public class LkFade : Control {
     g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half; g.CompositingQuality = CompositingQuality.HighSpeed;
     long el = sw == null ? 0 : sw.ElapsedMilliseconds;
     int d = Math.Max(1, dur), lim = Math.Max(Width, Height) + 4096;
-    foreach (It i in items.ToArray()) {
+    It[] tab = items.ToArray();
+    for (int n = 0; n < tab.Length; n++) {
+      It i = tab[n];
       // v5.10 : image absente / libérée / vide : ignorée ; toutes les valeurs bornées (jamais NaN ni hors limites)
       if (i == null || i.B == null || i.R.Width <= 0 || i.R.Height <= 0) continue;
       int bw, bh; try { bw = i.B.Width; bh = i.B.Height; } catch { continue; }   // Bitmap libéré -> ArgumentException
       if (bw <= 0 || bh <= 0) continue;
       float p = (float)(el - (long)i.K * pas) / d; if (float.IsNaN(p)) p = 1f; p = Math.Max(0f, Math.Min(1f, p));
       float q = LkAnim.Ease(p); if (float.IsNaN(q)) q = 1f; q = Math.Max(0f, Math.Min(1f, q));
+      if (q <= 0.002f) continue;   // v5.15 : pas encore parti = entièrement couvert par le fond : rien à dessiner
       int y = i.R.Y + (int)Math.Round(Math.Max(-1000f, Math.Min(1000f, dy * (1f - q))));
       if (i.R.X > lim || i.R.X < -lim || y > lim || y < -lim) continue;
       int w = Math.Min(i.R.Width, bw), h = Math.Min(i.R.Height, bh);
@@ -1224,7 +1281,34 @@ public class LkProc {
     } catch { }
   }
 }
-"@ } catch { $exceptionCompil = $_ }
+"@
+# v5.15 : démarrage plus rapide. Les composants de l'interface étaient recompilés (csc) à CHAQUE lancement
+#         (1 à 4 s). Ils sont compilés une fois dans scripts\cache\LkUi-<empreinte>.dll puis rechargés tels quels.
+#         L'empreinte change avec le code (nouvelle version = nouvelle compilation). Le cache est dans le dossier
+#         de l'appli (mêmes droits que les scripts eux-mêmes). Au moindre souci : compilation en mémoire, comme avant.
+$script:sourceUi = "compilé"
+try {
+  $shaUi = [Security.Cryptography.SHA256]::Create()
+  $empreinteUi = ([BitConverter]::ToString($shaUi.ComputeHash([Text.Encoding]::UTF8.GetBytes($codeUi + "|" + $PSVersionTable.CLRVersion + "|" + [IntPtr]::Size))) -replace '-', '').Substring(0, 20)
+  $dosCacheUi = Join-Path (Split-Path -Parent $PSCommandPath) "cache"
+  $dllUi = Join-Path $dosCacheUi "LkUi-$empreinteUi.dll"
+  if (Test-Path -LiteralPath $dllUi) {
+    try { Add-Type -Path $dllUi -ErrorAction Stop; $script:sourceUi = "cache" } catch { try { Remove-Item -LiteralPath $dllUi -Force -ErrorAction Stop } catch {} }
+  }
+  if (-not ("LkAnim" -as [type])) {
+    if (-not (Test-Path -LiteralPath $dosCacheUi)) { [void](New-Item -ItemType Directory -Path $dosCacheUi -Force -ErrorAction Stop) }
+    foreach ($vieux in @(Get-ChildItem -LiteralPath $dosCacheUi -Filter "LkUi-*.dll" -ErrorAction SilentlyContinue)) { try { Remove-Item -LiteralPath $vieux.FullName -Force -ErrorAction Stop } catch {} }
+    $tmpUi = Join-Path $dosCacheUi ("LkUi-" + [Guid]::NewGuid().ToString("N") + ".tmp")
+    Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -IgnoreWarnings -TypeDefinition $codeUi -OutputAssembly $tmpUi -OutputType Library -ErrorAction Stop
+    if ("LkAnim" -as [type]) { $script:sourceUi = "compilé" }   # déjà chargé par la compilation : on ne charge pas une 2e copie
+    else { Move-Item -LiteralPath $tmpUi -Destination $dllUi -Force -ErrorAction Stop; Add-Type -Path $dllUi -ErrorAction Stop; $script:sourceUi = "compilé (mis en cache)" }
+  }
+} catch { try { if ($tmpUi -and (Test-Path -LiteralPath $tmpUi)) { Remove-Item -LiteralPath $tmpUi -Force } } catch {} }
+if (-not ("LkAnim" -as [type])) {
+  $script:sourceUi = "compilé en mémoire"
+  try { Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -IgnoreWarnings -ErrorAction SilentlyContinue -ErrorVariable erreursCompil -TypeDefinition $codeUi } catch { $exceptionCompil = $_ }
+}
+$script:msCompil = $swCompil.ElapsedMilliseconds
 if (-not ("LkProc" -as [type]) -or -not ("LkAnim" -as [type])) {
   $lignes = New-Object System.Collections.Generic.List[string]
   foreach ($e in @($erreursCompil) + @($exceptionCompil)) {
@@ -1249,6 +1333,7 @@ $prefAnim = (Get-ItemProperty -Path $cleConfig -Name Animations -ErrorAction Sil
 $script:animWindows = [LkNative]::SystemAnimations()
 $script:animAppli = if ($null -ne $prefAnim) { [bool][int]$prefAnim } else { $true }
 [LkAnim]::On = $script:animAppli -and $script:animWindows
+try { [LkAnim]::Regler([LkNative]::FrequenceActuelle()) } catch {}   # v5.15 : images calées sur l'écran (60 Hz -> 15 ms, 144 Hz -> 10 ms)
 [LkAnim]::Reduit = [bool][int]("0" + (Get-ItemProperty -Path $cleConfig -Name AnimationsReduites -ErrorAction SilentlyContinue).AnimationsReduites)
 function Enregistrer-Pref($nom, $valeur) {
   try {
@@ -1285,7 +1370,8 @@ if ($sc -lt 1) { $sc = 1.0 }
 $scDpi = $sc
 try {
   $wa = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-  $scMax = [math]::Min($wa.Width / 1010.0, $wa.Height / 670.0)
+  # v5.15 : largeur réelle = 1000 + barre latérale 232 (avant : 1010 -> fenêtre plus large que l'écran en 1024 x 768)
+  $scMax = [math]::Min($wa.Width / 1242.0, $wa.Height / 670.0)
   if ($sc -gt $scMax) { $sc = [math]::Max(0.8, [math]::Floor($scMax * 20) / 20) }
 } catch {}
 function S($v) { [int][math]::Round($v * $sc) }
@@ -1307,6 +1393,17 @@ function Vider($pg) { $l = @($pg.Controls); $pg.Controls.Clear(); foreach ($c in
 $script:erreursDetection = @()
 function Lire-Wmi($quoi, [scriptblock]$code) {
   if ($env:LK_SIMU_RAPIDE) { return $null }   # tests : simule un PC très rapide (détection instantanée)
+  # v5.15 : résultat de la lecture faite en parallèle (au plus 45 s d'attente ; sinon lecture normale ici)
+  if ($script:preLecture) {
+    try { if ($script:preLecture.H.AsyncWaitHandle.WaitOne(45000)) { $o = @($script:preLecture.PS.EndInvoke($script:preLecture.H)); if ($o.Count -and $o[0] -is [hashtable]) { $script:preRes = $o[0] } } } catch {}
+    $pl = $script:preLecture; $script:preLecture = $null
+    if ($script:preRes) { try { $pl.PS.Runspace.Close(); $pl.PS.Dispose() } catch {} }   # (si elle est bloquée, on la laisse : elle ne gêne pas)
+  }
+  if ($script:preRes -and $script:preRes.ContainsKey($quoi)) {
+    $e = $script:preRes[$quoi]
+    if (-not $e.Ok) { $script:erreursDetection += "$(T $quoi) : $($e.E)"; return $null }
+    $v = @($e.V); if ($v.Count -eq 0) { return $null } elseif ($v.Count -eq 1) { return $v[0] } else { return $v }
+  }
   try { $ErrorActionPreference = "Stop"; & $code } catch { $script:erreursDetection += "$(T $quoi) : $($_.Exception.Message)"; $null }
 }
 Etape-Chargement 20 30 "Détection du processeur..."
@@ -2635,7 +2732,7 @@ function Remplir-Espace($r) {
   $cD = New-Object LkCard; $cD.Fill = $cCarte; $cD.Radius = S 12; $cD.Location = Pt 0 0; $cD.Size = Sz 920 (24 + 30 * [math]::Max(1, $dsk.Count))
   $yd = 12
   foreach ($d in $dsk) {
-    $pc = [int](100 - 100 * $d.AvailableFreeSpace / [math]::Max(1, $d.TotalSize))
+    $pc = [int](100 - 100 * $d.AvailableFreeSpace / [math]::Max([long]1, $d.TotalSize))
     [void](Icone $cD "drive" 14 $yd 22 22 16 $cAccentClair $cCarte)
     [void](Lbl $cD ("$($d.Name.TrimEnd('\')) " + $(if ($d.VolumeLabel) { $d.VolumeLabel } else { "" })) 44 ($yd + 2) 220 18 (Police 12.5 "Bold") $cBlanc $cCarte)
     $bD = New-Object LkBar; $bD.Location = Pt 270 ($yd + 9); $bD.Size = Sz 400 5; $bD.Fill = $(if ($pc -ge 90) { $cOrange } else { $cAccent }); $bD.Fill2 = $(if ($pc -ge 90) { [Drawing.Color]::Empty } else { $cCyan }); $bD.Track = $cPiste; $bD.Value = $pc; $cD.Controls.Add($bD)
@@ -2648,7 +2745,8 @@ function Remplir-Espace($r) {
   [void](Lbl $pg "Clique sur une ligne pour ouvrir le dossier. Pour faire de la place : Nettoyage > fichiers temporaires, ou désinstalle les jeux que tu n'utilises plus." 216 ($y + 1) 700 34 (Police 11.5) $cGris $cFond)
   $y += 52
   if (-not $liste.Count) { [void](Lbl $pg "Mesure impossible (voir le Journal)." 2 $y 600 20 (Police 13) $cOrange $cFond); $pages["espace"].Panel.Recalc(); return }
-  $max = [double](($liste | Measure-Object Taille -Maximum).Maximum); if ($max -le 0) { $max = 1 }
+  # v5.15 : les éléments sont des tables (@{}) : Measure-Object ne voyait pas « Taille » (max = 1 -> barres pleines, puis dépassement)
+  $max = 0.0; foreach ($e in $liste) { if ([double]$e.Taille -gt $max) { $max = [double]$e.Taille } }; if ($max -le 0) { $max = 1.0 }
   $cats = [ordered]@{ perso = "DOSSIERS PERSONNELS"; steam = "JEUX STEAM (PLUS GROS)"; temp = "TEMPORAIRES ET CORBEILLE"; appdata = "APPDATA (PLUS GROS DOSSIERS)"; systeme = "FICHIERS SYSTÈME (GÉRÉS PAR WINDOWS, NE PAS SUPPRIMER)" }
   $total = 0
   foreach ($k in $cats.Keys) {
@@ -2660,7 +2758,7 @@ function Remplir-Espace($r) {
       $t1 = Lbl $c (T $el.Nom) 18 9 560 20 (Police 13.5 "Bold") $cBlanc $cCarte; $t1.AutoEllipsis = $true
       $t2 = Lbl $c $el.Chemin 18 31 560 18 (Police 11.5) $cGris $cCarte; $t2.AutoEllipsis = $true
       $t3 = Lbl $c ((Taille-Txt $el.Taille) + $(if (-not $el.Complet) { " +" } else { "" })) 620 8 282 22 (Police 14 "Bold") $cBlanc $cCarte; $t3.TextAlign = "TopRight"
-      $bb = New-Object LkBar; $bb.Location = Pt 642 38; $bb.Size = Sz 260 5; $bb.Fill = $cAccent; $bb.Fill2 = $cCyan; $bb.Track = $cPiste; $bb.Value = [int][math]::Max(1, 100 * $el.Taille / $max); $c.Controls.Add($bb)
+      $bb = New-Object LkBar; $bb.Location = Pt 642 38; $bb.Size = Sz 260 5; $bb.Fill = $cAccent; $bb.Fill2 = $cCyan; $bb.Track = $cPiste; $bb.Value = [int][math]::Min(100.0, [math]::Max(1.0, 100.0 * $el.Taille / $max)); $c.Controls.Add($bb)
       $aide = $el.Chemin + $(if (-not $el.Complet) { "`n" + (T "Mesure arrêtée avant la fin (dossier énorme ou protégé) : la taille réelle est plus grande.") } else { "" })
       foreach ($x in $c, $t1, $t2, $t3, $bb) {
         $x.Cursor = "Hand"; $x.Tag = $el; $tip.SetToolTip($x, $aide); Survol-Carte $x
@@ -2728,7 +2826,7 @@ $bDnsCache.Location = Pt 232 196; $bDnsCache.Size = Sz 220 42; $bDnsCache.Fill =
 $pR.Controls.Add($bDnsAppl); $pR.Controls.Add($bDnsCache)
 [void](Lbl $pR "Les DNS d'origine sont sauvegardés : « Tout annuler » (Système) les remet. IPv4 et IPv6, cartes réseau physiques connectées." 2 252 900 40 (Police 12) $cGris $cFond)
 function Appliquer-Dns($k) {
-  $cartes = Cartes-Actives
+  $cartes = @(Cartes-Actives)   # v5.15 : @() : avec UNE seule carte, .Count n'existe pas sur l'objet CIM (Windows PowerShell 5.1) -> « aucune carte »
   if (-not $cartes.Count) { [void](Boite (T "Aucune carte réseau physique connectée.")); return $false }
   Retenir-Dns $cartes
   $srv = $dnsChoix[$k].Srv; $ok = 0
@@ -3557,14 +3655,15 @@ function MajStats {
     $libre = [math]::Round($dC.AvailableFreeSpace / 1GB); $pc = [int](100 - 100 * $dC.AvailableFreeSpace / $dC.TotalSize)
     $stC.Val.Text = "$libre " + (T "Go libres sur") + " $([math]::Round($dC.TotalSize / 1GB)) $uGo"
     $stC.Barre.Value = $pc; Pct $stC.Pct $pc
-    $tip.SetToolTip($stC.Pct, (T "Espace utilisé sur le disque système"))
+    if (-not $script:statsVues) { $tip.SetToolTip($stC.Pct, (T "Espace utilisé sur le disque système")) }   # v5.15 : une fois (avant : toutes les 1,5 s)
   } catch {}
   $script:statsVues = $true
 }
 [void][LkNative]::CpuLoad()
 $tStats = New-Object Windows.Forms.Timer; $tStats.Interval = 1500
 # jauges mises à jour seulement quand le tableau de bord est visible et la fenêtre pas réduite
-$tStats.Add_Tick({ if ($f.WindowState -ne "Minimized" -and $script:pageActive -eq "accueil") { MajStats } }); $tStats.Start()
+# v5.15 : pas pendant une animation (glissement de page, survol...) : la mise à jour attend la fin, l'image ne saute pas
+$tStats.Add_Tick({ if ([LkAnim]::NbJobs -gt 0) { return }; if ($f.WindowState -ne "Minimized" -and $script:pageActive -eq "accueil") { MajStats } }); $tStats.Start()
 
 # --- Bandeau d'alertes (données réelles) ---
 function Alerte($i) {
@@ -3619,8 +3718,9 @@ function Maj-Alertes {
   if (-not $script:alertesInit) { $script:alertesInit = $true; Regler-Alerte $alDem 0xE895 $cAccentClair (T "Lecture du démarrage...") "" $null; Regler-Alerte $alSante 0xE895 $cAccentClair (T "Lecture des disques...") "" $null }
   En-Fond "alertes-demarrage" $codeDemarrage (Vars-Demarrage $false) { param($r) Alerte-Demarrage $r }
   # v5.14 : Réparer et Diagnostic lus en arrière-plan (score, rapport système ; pages remplies dès l'ouverture)
-  if (-not $script:reparRes) { try { Lancer-Reparer } catch {} }
-  if (-not $script:diagRes) { try { Lancer-Diagnostic } catch {} }
+  # v5.15 : 6 s plus tard (avant : en même temps que le démarrage, les disques et la mise à jour = 5 lectures d'un coup,
+  #         fenêtre moins réactive juste après l'ouverture). Ouvrir l'une de ces pages lance sa lecture tout de suite.
+  if (-not $script:reparRes -or -not $script:diagRes) { $tLecturesDifferees.Stop(); $tLecturesDifferees.Start() }
   Maj-AlerteOptim
   # 3. Mise à jour disponible, sinon santé des disques
   if ($etatMaj.Statut -in @("dispo", "telechargement", "telecharge")) {
@@ -3629,6 +3729,8 @@ function Maj-Alertes {
   }
   En-Fond "alertes-disques" $codeDisques @{} { param($d) Alerte-Disques $d }
 }
+$tLecturesDifferees = New-Object Windows.Forms.Timer; $tLecturesDifferees.Interval = 6000
+$tLecturesDifferees.Add_Tick({ $tLecturesDifferees.Stop(); if (-not $script:reparRes) { try { Lancer-Reparer } catch {} }; if (-not $script:diagRes) { try { Lancer-Diagnostic } catch {} } })
 # v5.3 : alerte « dernière optimisation » seule, rafraîchie tout de suite à la fin d'OPTIMISER / Tout annuler
 function Maj-AlerteOptim {
   # Dernière optimisation (annulable tant que la sauvegarde existe)
@@ -3645,7 +3747,20 @@ function Maj-AlerteOptim {
 # applis lourdes au démarrage (10), espace libre du disque système (10), santé des disques (5), âge du pilote
 # graphique (5). Une mesure pas encore lue (démarrage, disques, pilote) n'est pas comptée du tout (ni pour, ni
 # contre). VBS n'est pas compté : c'est un compromis sécurité / performance, pas un « mieux ».
-function Lire-Reg($chemin, $nom) { try { (Get-ItemProperty -LiteralPath $chemin -Name $nom -ErrorAction Stop).$nom } catch { $null } }
+# v5.15 : lecture directe (.NET) : plus rapide que Get-ItemProperty et ne remplit plus $Error quand la valeur n'existe pas
+function Lire-Reg($chemin, $nom) {
+  $k = $null
+  try {
+    if ($chemin -match '^(HKLM|HKCU):\\(.+)$') {
+      $ruche = if ($matches[1] -eq 'HKLM') { [Microsoft.Win32.RegistryHive]::LocalMachine } else { [Microsoft.Win32.RegistryHive]::CurrentUser }
+      $k = [Microsoft.Win32.RegistryKey]::OpenBaseKey($ruche, [Microsoft.Win32.RegistryView]::Default).OpenSubKey($matches[2])
+      if ($k) { return $k.GetValue($nom) }
+      return $null
+    }
+    if (Test-Path -LiteralPath $chemin) { $p = Get-ItemProperty -LiteralPath $chemin -ErrorAction SilentlyContinue; if ($p) { return $p.$nom } }
+    $null
+  } catch { $null } finally { if ($k) { $k.Close() } }
+}
 $script:scoreDem = $null; $script:scoreDisques = $null; $script:scoreDetail = @()
 $testsScore = @(
   # v5.14 : valeur réellement présente exigée (absente = pas compté comme réglé)
@@ -3670,7 +3785,7 @@ function Calculer-Score {
   }
   if ($null -ne $script:scoreDem) { $p = [math]::Max(0, 10 - 3 * $script:scoreDem); $pts += $p; $max += 10; $det += , @(($script:scoreDem -eq 0), ((T "Applis lourdes au démarrage") + " : $($script:scoreDem)"), $p, 10) }
   try {
-    $dC = New-Object IO.DriveInfo($env:SystemDrive); $pl = [math]::Round(100 * $dC.AvailableFreeSpace / [math]::Max(1, $dC.TotalSize))
+    $dC = New-Object IO.DriveInfo($env:SystemDrive); $pl = [math]::Round(100 * $dC.AvailableFreeSpace / [math]::Max([long]1, $dC.TotalSize))
     $p = if ($pl -ge 20) { 10 } elseif ($pl -ge 10) { 5 } else { 0 }; $pts += $p; $max += 10
     $det += , @(($p -eq 10), ((T "Espace libre sur {0}") -f $env:SystemDrive) + " : $pl %", $p, 10)
   } catch {}
@@ -3955,7 +4070,7 @@ function Fin-Execution {
   # v5.14 : Réparer et Diagnostic relus après chaque opération (ce qui a été réparé disparaît de la liste)
   if (-not $script:arrete) { $script:reparRes = $null; $script:diagRes = $null; foreach ($pn in "reparer", "diagnostic") { $script:pages[$pn].Construite = $false }; if ($script:pageActive -in @("reparer", "diagnostic")) { try { Afficher $script:pageActive -Forcer } catch {} } }
   $hero.SetProg(100); try { $orb.SetProgress(1) } catch {}; $hD.Text = $texteHero; $tCacheProg.Start()
-  $duree = [math]::Max(1, [math]::Round(((Get-Date) - $script:debut).TotalMinutes))
+  $duree = [math]::Max(1.0, [math]::Round(((Get-Date) - $script:debut).TotalMinutes))
   Log ("Résumé : " + $script:resume.Count + " élément(s), $duree min, $($script:nbErreurs) erreur(s).")
   if ($TestAuto) { [IO.File]::WriteAllText((Join-Path $dossierJournal "test-termine.txt"), $fichierJournal) }
   else { Afficher-Resume $duree }
@@ -4462,7 +4577,9 @@ $tFinChg.Add_Tick({ $tFinChg.Stop(); $tPretChg.Stop(); Fermer-Chargement })
 # l'écran ne s'efface qu'une fois la fenêtre entièrement opaque (fondu d'entrée fini) : pas de bureau entre les deux
 $tPretChg = New-Object Windows.Forms.Timer; $tPretChg.Interval = 40
 $tPretChg.Add_Tick({ if ($f.Opacity -ge 0.99) { $tPretChg.Stop(); $f.Update(); Pret-Chargement } })
-$f.Add_Shown({ $script:fenetreVue = $true; Fin-Chargement; $tFinChg.Start(); $tPretChg.Start(); $f.Activate() })
+$f.Add_Shown({ $script:fenetreVue = $true; Fin-Chargement; $tFinChg.Start(); $tPretChg.Start(); $f.Activate()
+  # v5.15 : temps de démarrage mesuré (journal), pour suivre les optimisations
+  try { $script:msDemarrage = [int]((Get-Date) - [Diagnostics.Process]::GetCurrentProcess().StartTime).TotalMilliseconds; Log ("Fenêtre affichée {0:N1} s après le lancement (composants de l'interface : {1}, {2} ms)." -f ($script:msDemarrage / 1000), $script:sourceUi, $script:msCompil) } catch {} })
 $f.Add_FormClosed({ Fermer-Chargement })
 # v5.5 : fenêtre réduite ou inactive => pulsations en pause (reprennent au retour)
 $script:fActive = $true

@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.14). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.15). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -175,13 +175,13 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.14",
+           "build": "5.15",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
          }
   "version" est le numéro public, "build" le numéro interne : tant que la version
-  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
   Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
   téléchargé est vérifié et supprimé s'il ne correspond pas.
   Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
@@ -243,6 +243,39 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉ v0.1 bêta (version interne 5.15)
+  - Animations plus fluides : le minuteur des animations est maintenant précis
+    pendant qu'elles jouent (avant : environ 32 images/s à cause du pas de 15,6 ms
+    du minuteur de Windows ; maintenant calé sur la fréquence de l'écran, environ
+    60 images/s sur un écran 60 Hz). Rien ne tourne au repos.
+  - Changement de page : moins de dessin par image (les éléments pas encore
+    partis ne sont plus dessinés), titres et compteurs repeints seulement quand
+    ils changent, cartes qui ne repeignent leurs textes que si la couleur change.
+  - Démarrage plus rapide : les composants de l'interface sont compilés une seule
+    fois (dossier scripts\cache), puis rechargés tels quels aux lancements
+    suivants. La détection du matériel commence pendant ce temps.
+  - Moins de charge juste après l'ouverture : les lectures de Système > Réparer
+    et Matériel > Diagnostic démarrent quelques secondes plus tard au lieu de
+    tout lancer en même temps ; les statistiques ne se mettent pas à jour pendant
+    une animation.
+  - Journal : durée d'ouverture de la fenêtre notée au démarrage.
+
+CORRECTIFS v0.1 bêta (version interne 5.15)
+  - Système > Réseau : « Appliquer ce DNS » répondait « Aucune carte réseau
+    physique connectée » sur un PC qui n'a qu'une carte réseau (le cas le plus
+    courant) : le DNS n'était pas changé. Corrigé.
+  - Écran de 1024 pixels de large : la fenêtre dépassait de l'écran ; elle est
+    maintenant réduite pour tenir.
+  - Disque de plus de 2 Go : le calcul de l'espace libre échouait (dépassement
+    de nombre). Le critère « Espace libre » du score était ignoré et la page
+    Système > Espace disque restait incomplète.
+  - Système > Espace disque : les barres de taille des dossiers étaient toutes
+    pleines, et la liste s'arrêtait au premier gros dossier. Corrigé.
+  - Lecture des réglages pour le score : plus rapide et sans erreur cachée quand
+    une valeur n'existe pas encore.
+  - Deux fondus de texte pouvaient se battre sur le même titre en changeant vite
+    de page (scintillement).
 
 NOUVEAUTÉ v0.1 bêta (version interne 5.14)
   - Système > Réparer : retrouve les réglages nuisibles laissés par d'autres
