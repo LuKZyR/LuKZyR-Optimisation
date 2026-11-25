@@ -1,9 +1,9 @@
 =====================================================
-           HELIXFLUX OPTIMISATION  v0.1 bêta
+           LUKZYR OPTIMISATION  v0.1 bêta
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.5). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.6). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -11,13 +11,13 @@ VERSION BÊTA
 
 DÉMARRAGE
   1. Dézippe tout le dossier (ne lance pas depuis le zip).
-  2. Double-clique sur "HelixFlux Optimisation.exe" (ou, en secours,
-     sur "LANCER - HelixFlux Optimisation.bat").
+  2. Double-clique sur "LuKZyR Optimisation.exe" (ou, en secours,
+     sur "LANCER - LuKZyR Optimisation.bat").
   3. Accepte la demande administrateur.
   4. L'exe n'est pas signé numériquement : SmartScreen ou ton antivirus peuvent
      afficher un avertissement. SmartScreen : "Informations complémentaires" >
      "Exécuter quand même". Le code source de l'exe est dans assets\source-lanceur\
-     (il ne fait que lancer scripts\HelixFlux-Optimisation.ps1 en administrateur).
+     (il ne fait que lancer scripts\LuKZyR-Optimisation.ps1 en administrateur).
 
 L'INTERFACE (onglets en haut)
   TABLEAU DE BORD
@@ -68,14 +68,25 @@ L'INTERFACE (onglets en haut)
                 Animations réduites, Mise à jour de l'appli, À propos.
 
   Chaque option a un badge :
-    SÛR        sans danger, remis par « Tout annuler »
-    AVANCÉ     à comprendre avant (VBS, Copilot, OneDrive, réparation DISM/SFC)
-    DÉFINITIF  ne peut pas être annulé (désinstallation d'Edge)
+    SÛR             sans danger, remis par « Tout annuler »
+    NON RÉVERSIBLE  sans danger pour Windows, mais « Tout annuler » ne peut pas le
+                    défaire (débloat, Copilot, fichiers temporaires, nettoyage WinSxS,
+                    applis et pilotes installés, mises à jour winget, DISM + SFC)
+    AVANCÉ          remis par « Tout annuler », mais à comprendre avant (VBS, applis du
+                    Store en arrière-plan)
+    DÉFINITIF       risqué ET non annulable (désinstallation d'Edge, de OneDrive)
   Activer une option AVANCÉ ou DÉFINITIF à la main demande une confirmation, et le
-  récapitulatif avant application les liste à part.
+  récapitulatif avant application les liste à part, ainsi que tout ce qui n'est pas
+  annulable.
 
   Dans une section : active les interrupteurs voulus (clique n'importe où sur la
-  carte), puis APPLIQUER (en bas). Une seule fenêtre récapitule ce qui va être fait.
+  carte), puis APPLIQUER (en bas). Attention : APPLIQUER prend les cases cochées de
+  TOUTES les pages ; si d'autres pages ont des cases cochées, l'appli demande
+  « Oui = tout appliquer / Non = seulement cette page ». Une seule fenêtre récapitule
+  ensuite ce qui va être fait. Si le point de restauration ne peut pas être créé,
+  l'appli demande s'il faut continuer sans (Non = rien n'est modifié).
+  Système > Démarrage : chaque interrupteur s'applique tout de suite (comme le
+  Gestionnaire des tâches) ; l'état d'origine est gardé pour « Tout annuler ».
   Tout se déroule en arrière-plan, sans fenêtre noire, et s'affiche dans Journal.
   Redémarre le PC à la fin.
 
@@ -100,18 +111,21 @@ MISE À JOUR DE L'APPLI (facultatif)
   sur le Bureau (le dossier s'ouvre ; l'appli ne se remplace jamais toute seule).
 
   Pour l'activer, par exemple avec GitHub :
-    1. Crée un dépôt public (ex. helixflux-optimisation) et publie le zip dans une
-       « Release » (ex. tag v0.2, fichier HelixFlux-Optimisation-v0.2.zip).
+    1. Crée un dépôt public (ex. LuKZyR-Optimisation) et publie le zip dans une
+       « Release » (ex. tag v0.2, fichier LuKZyR-Optimisation-v0.2.zip).
     2. Ajoute à la racine du dépôt un fichier version.json :
          {
            "version": "0.2",
-           "url": "https://github.com/TON-PSEUDO/helixflux-optimisation/releases/download/v0.2/HelixFlux-Optimisation-v0.2.zip",
-           "notes": "Corrections et nouveautés"
+           "url": "https://github.com/TON-PSEUDO/LuKZyR-Optimisation/releases/download/v0.2/LuKZyR-Optimisation-v0.2.zip",
+           "notes": "Corrections et nouveautés",
+           "sha256": "empreinte SHA-256 du zip (facultatif, conseillé)"
          }
+       Les adresses doivent être en https (sinon elles sont refusées). Si "sha256" est
+       donné, le zip téléchargé est vérifié et supprimé s'il ne correspond pas.
     3. Donne l'adresse « raw » de ce fichier à l'appli, au choix :
        - dans C:\ProgramData\Lukzyr\config.json :
-           { "urlMiseAJour": "https://raw.githubusercontent.com/TON-PSEUDO/helixflux-optimisation/main/version.json" }
-       - ou en haut de scripts\HelixFlux-Optimisation.ps1 : $UrlMiseAJourDefaut = "https://..."
+           { "urlMiseAJour": "https://raw.githubusercontent.com/TON-PSEUDO/LuKZyR-Optimisation/main/version.json" }
+       - ou en haut de scripts\LuKZyR-Optimisation.ps1 : $UrlMiseAJourDefaut = "https://..."
     À chaque nouvelle version : publie le zip, puis change "version" et "url".
     Numéros acceptés : "0.1.1", "0.2", "0.2-beta"... (v0.1 bêta = 0.1.0). Une version
     finale "0.1" est proposée aux utilisateurs de la 0.1 bêta ; "0.1-beta" ne l'est pas.
@@ -127,7 +141,7 @@ RÉGLAGES DE L'APPLI
   retrouve les sauvegardes faites avec les versions précédentes.
 
 SÉCURITÉ
-  - Un point de restauration "Avant HelixFlux Optimisation" est créé avant de commencer.
+  - Un point de restauration "Avant LuKZyR Optimisation" est créé avant de commencer.
   - Les réglages d'origine sont sauvegardés : « Tout annuler ».
   - Store, Xbox, Defender, Windows Update et pilotes ne sont jamais touchés
     (aucun pilote n'est supprimé).
@@ -146,16 +160,16 @@ TEMPÉRATURE (Matériel > Santé)
   confirmes). Ensuite : ouvre LibreHardwareMonitor, Options > Remote Web Server > Run
   (port 8085), puis Actualiser dans Santé : températures processeur ET carte graphique.
   Bon à savoir : LibreHardwareMonitor utilise son propre pilote de capteurs, que
-  certains antivirus (dont Defender) peuvent signaler. HelixFlux n'installe jamais de pilote
+  certains antivirus (dont Defender) peuvent signaler. LuKZyR n'installe jamais de pilote
   lui-même, n'en fournit aucun et ne touche pas à l'antivirus.
 
 CONTENU DU DOSSIER
-  HelixFlux Optimisation.exe            Lance l'interface (demande les droits admin)
-  LANCER - HelixFlux Optimisation.bat   Lanceur de secours
+  LuKZyR Optimisation.exe            Lance l'interface (demande les droits admin)
+  LANCER - LuKZyR Optimisation.bat   Lanceur de secours
   scripts\                           Scripts PowerShell (+ Mode-console.bat sans interface,
                                      qui propose aussi le guide BIOS personnalisé)
   guides\Guide-BIOS.txt              Guide BIOS générique (secours)
-  assets\helixflux.ico                  Icône (fenêtre + exe)
+  assets\lukzyr.ico                  Icône (fenêtre + exe)
   assets\logo.png                    Logo de l'en-tête
   assets\source-lanceur\             Source du lanceur .exe + Compiler-Lanceur.bat
                                      (+ logo original et logo détouré haute définition)
@@ -163,21 +177,47 @@ CONTENU DU DOSSIER
 CHANGER LE LOGO
   Le logo n'existe qu'à un seul endroit : le dossier assets.
     1. Remplace assets\logo.png (carré, 256 x 256 conseillé, fond transparent)
-       et assets\helixflux.ico (icône Windows : 16, 32, 48, 64, 128 et 256 px).
+       et assets\lukzyr.ico (icône Windows : 16, 32, 48, 64, 128 et 256 px).
        La fenêtre et l'en-tête les utilisent directement.
     2. Pour l'icône de l'exe (elle est intégrée au fichier) : double-clique sur
        assets\source-lanceur\Compiler-Lanceur.bat. Il recompile
-       « HelixFlux Optimisation.exe » avec le compilateur C# fourni avec Windows
+       « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
 
-NOUVEAUTÉS v0.1 bêta — HelixFlux (version interne 5.5)
-  - L'appli s'appelle maintenant HelixFlux Optimisation (by Lukzyr), avec un nouveau
-    logo (H dégradé bleu-violet) : fenêtre, écran de chargement, exe, À propos.
-    Les réglages, journaux et sauvegardes restent dans HKCU\Software\Lukzyr et
-    C:\ProgramData\Lukzyr : « Tout annuler » fonctionne avec les sauvegardes faites
-    par l'ancienne version (avant le changement de nom). L'ancien dossier de l'appli
-    peut être supprimé.
+NOUVEAUTÉS v0.1 bêta — correctifs (version interne 5.6)
+  - Nouveau nom : LuKZyR Optimisation (exe « LuKZyR Optimisation.exe ») et nouveau
+    logo (dégradé cyan-violet) : icône, exe, écran de chargement, barre de titre,
+    À propos. Réglages et sauvegardes toujours dans HKCU\Software\Lukzyr et
+    C:\ProgramData\Lukzyr : rien à migrer, « Tout annuler » marche toujours.
+  - Les scripts signalent enfin leurs échecs (code d'erreur) : le résumé dit « avec des
+    erreurs » au lieu de « tout a réussi », et « point de restauration créé » n'apparaît
+    que s'il l'a vraiment été. Point de restauration impossible = l'appli demande avant
+    de continuer.
+  - La fréquence des points de restauration de Windows est sauvegardée AVANT d'être
+    changée, puis remise aussitôt (avant : elle pouvait rester à 0).
+  - Edge n'est désinstallé que si un autre navigateur est vraiment installé ; échec
+    signalé si Edge est toujours là.
+  - Badges honnêtes : nouveau badge « NON RÉVERSIBLE » ; OneDrive passe en DÉFINITIF.
+  - winget lancé par son chemin complet (pilotes, LibreHardwareMonitor, applis).
+  - « Tout annuler » : DNS IPv4 et IPv6 remis séparément ; plan d'alimentation recréé
+    repéré par son identifiant (et supprimé à l'annulation) ; hibernation et TRIM
+    vérifiés ; TRIM aussi sur les SSD NVMe de type « inconnu ».
+  - VBS : texte honnête (gain variable, peut rester actif avec Hyper-V / WSL2).
+  - Débloat : résultat vérifié pour chaque appli, retrait pour tous les comptes indiqué,
+    beaucoup plus rapide.
+  - Démarrage : état réel des logiciels de sécurité affiché.
+  - APPLIQUER : choix « tout » ou « seulement cette page ».
+  - Mises à jour : https obligatoire, délai court, empreinte SHA-256 vérifiée.
+  - Plantage au démarrage : message clair + C:\ProgramData\Lukzyr\plantage-demarrage.txt ;
+    refus de la demande administrateur expliqué.
+  - Fermer l'appli pendant une opération arrête aussi les programmes lancés.
+  - Scripts lancés seuls : la relance en administrateur garde les paramètres.
+  - Divers : disque « % utilisés », vitesse RAM et alerte XMP justes, Spotify vérifié,
+    onduleur plus pris pour une batterie de portable, avertissement Curve Optimizer,
+    nettoyage Temp sans suivre les liens, gain mesuré sur le bon disque.
+
+NOUVEAUTÉS v0.1 bêta (version interne 5.5)
   - Nouveaux réglages, tous remis par « Tout annuler » : optimisations des jeux en
     fenêtre, optimisations VRR, applis de démarrage sans délai, Edge sans préchargement
     (si Edge est installé), plan « Utilisation normale » (profil Équilibré et PC
@@ -224,16 +264,16 @@ NOUVEAUTÉS v0.1 bêta (version interne 5.3)
   - Animations plus fluides : glissement des pages adouci, halo au survol des cartes,
     onde douce et anneau de progression autour du bouton OPTIMISER, alertes en fondu.
     Toujours désactivables (Paramètres > Animations).
-  - Badge « BÊTA » à côté de HELIXFLUX, numéro v0.1 bêta partout (écran de chargement,
+  - Badge « BÊTA » à côté de LuKZyR, numéro v0.1 bêta partout (écran de chargement,
     À propos, propriétés de l'exe : version 0.1.0.0 / 0.1.0-beta).
   - Coins arrondis sous Windows 11 pour les écrans de chargement.
 
 NOUVEAUTÉS v5.2
-  - Écran de chargement dès le double-clic : logo, HELIXFLUX, cercle qui tourne, barre de
+  - Écran de chargement dès le double-clic : logo, LuKZyR, cercle qui tourne, barre de
     progression avec pourcentage et l'étape en cours (Détection du processeur, Carte
     graphique, Carte mère, Mémoire, Disques, Préparation de l'interface...). Il ne se fige
     jamais (il tourne à part), suit le thème clair / sombre et la langue, puis s'efface en
-    fondu quand la fenêtre apparaît. Le lanceur « HelixFlux Optimisation.exe » l'affiche
+    fondu quand la fenêtre apparaît. Le lanceur « LuKZyR Optimisation.exe » l'affiche
     lui aussi tout de suite. Si une détection échoue, l'appli s'ouvre quand même (détail
     dans le Journal).
   - Nouvelles icônes partout : un seul jeu cohérent (traits arrondis, même épaisseur),
@@ -287,7 +327,7 @@ NOUVEAUTÉS v4.0
   - Applications : EA app, Battle.net, GOG Galaxy, 7-Zip, VLC, OBS Studio, en sections.
   - Thème clair / sombre (Outils ou bouton soleil en haut), changé en direct.
   - Interface en anglais (Outils > Langue ; par défaut la langue de Windows).
-  - Vrai lanceur « HelixFlux Optimisation.exe » avec l'icône (le .bat reste en secours).
+  - Vrai lanceur « LuKZyR Optimisation.exe » avec l'icône (le .bat reste en secours).
 
 NOUVEAUTÉS v3.2
   - Interface animée, légère et fluide : ouverture/fermeture en fondu,

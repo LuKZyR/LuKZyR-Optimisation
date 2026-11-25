@@ -1,8 +1,8 @@
-GUIDE BIOS GÉNÉRIQUE - HelixFlux Optimisation v3.1
+GUIDE BIOS GÉNÉRIQUE - LuKZyR Optimisation v3.1
 ================================================
 Ce fichier est un guide de secours, valable pour toutes les cartes mères.
 Pour un guide adapté à TA carte mère (touche, menus, état de ta RAM, de
-Resizable BAR, du TPM...), ouvre HelixFlux Optimisation > BIOS, ou lance
+Resizable BAR, du TPM...), ouvre LuKZyR Optimisation > BIOS, ou lance
 scripts\Mode-console.bat et réponds O à « Générer le guide BIOS ».
 
 Les noms de menus varient selon le fabricant et la version du BIOS.
