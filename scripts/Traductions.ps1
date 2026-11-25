@@ -540,3 +540,5 @@ $EN['Signaler un bug'] = 'Report a bug'
 $EN['Signaler un bug (Discord)'] = 'Report a bug (Discord)'
 $EN['Un souci ? Explique-le sur le serveur Discord (joins le journal : Journal > Exporter).'] = 'A problem? Describe it on the Discord server (attach the log: Log > Export).'
 $EN['Le navigateur ne s''est pas ouvert. Lien copié, colle-le dans ton navigateur :'] = 'The browser did not open. Link copied, paste it into your browser:'
+# v5.13 : repli du sous-titre Accueil si aucune carte graphique n'est détectée
+$EN['Carte graphique'] = 'Graphics card'

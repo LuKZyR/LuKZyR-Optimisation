@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.12). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.13). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -51,7 +51,7 @@ L'INTERFACE (barre latérale à gauche)
     l'hibernation). « Optimiser maintenant » : point de restauration + sauvegarde des
     réglages + application du profil. Seuls les réglages du profil sont appliqués (pas
     les applis ni les pilotes).
-    En direct : processeur, carte graphique (charge et mémoire vidéo), mémoire, disque
+    En direct : processeur et carte graphique (leur nom et leur charge), mémoire, disque
     C:, avec une courbe des 60 dernières secondes. Mesuré seulement quand le Tableau de
     bord est affiché (rien en arrière-plan sinon). Températures : affichées si
     LibreHardwareMonitor est ouvert (sinon, rarement, par Windows).
@@ -226,6 +226,15 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉ v0.1 bêta (version interne 5.13)
+  - Tableau de bord : la carte « Carte graphique » affiche le nom de la carte
+    (comme le processeur), au lieu de la mémoire vidéo. Un nom trop long est
+    coupé avec des points de suspension. Si aucune carte n'est détectée :
+    « Carte graphique ». La mémoire vidéo reste visible dans Matériel.
+  - Badges d'options (SÛR, NON RÉVERSIBLE, AVANCÉ, DÉFINITIF, et les badges
+    d'impact) : le texte n'est plus en gras (couleurs, icônes et majuscules
+    inchangés).
 
 NOUVEAUTÉ v0.1 bêta (version interne 5.12)
   - Paramètres > « Signaler un bug (Discord) » : ouvre le serveur Discord de LuKZyR

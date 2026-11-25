@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.12)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.13)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.12
-$VersionInterne = "5.12"   # comparé comme [version] : 5.12 > 5.11 > 5.10 > 5.9
+$VersionBeta = $true         # v0.1 bêta = version interne 5.13
+$VersionInterne = "5.13"   # comparé comme [version] : 5.13 > 5.12 > 5.11 > 5.10
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -14,6 +14,7 @@ $UrlMiseAJourDefaut = "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisat
 # 2e source si version.json est absent ou illisible : les releases GitHub du dépôt (pré-versions comprises)
 $UrlReleasesDefaut  = "https://api.github.com/repos/LuKZyR/LuKZyR-Optimisation/releases?per_page=5"
 # v5.12 : serveur Discord pour signaler les bugs (Paramètres > « Signaler un bug (Discord) », messages de plantage)
+# v5.13 : Accueil, carte « Carte graphique » : nom court au lieu de la VRAM ; badges d'état en regular (plus de gras)
 $UrlDiscord = "https://discord.gg/2RrjqvC5vv"
 # v5.6 : un plantage au démarrage n'est plus invisible : journal ProgramData\Lukzyr\plantage-demarrage.txt + message
 $script:fichierPlantage = Join-Path $env:ProgramData "Lukzyr\plantage-demarrage.txt"
@@ -1429,8 +1430,10 @@ $volC = Get-Volume -DriveLetter ($env:SystemDrive.Substring(0,1))
 # Noms courts pour les cartes de statistiques
 $cpuCourt = (($cpuNom -replace '\((R|TM)\)','' -replace '\bCPU\b|\bProcessor\b|\d+-Core|\bAMD\b|\bIntel\b','' -replace '@.*$','') -split '\s+' | Where-Object { $_ }) -join ' '
 $gpuNom = if ($gpus.Count) { "$($gpus[0].Name)" } else { "" }
-$gpuCourt = if ($gpuNom) { ($gpuNom -replace '\((R|TM)\)','' -replace '\bAMD\b|\bRadeon\b|\bNVIDIA\b|\bGeForce\b|\bGraphics\b|\(pilote non installé\)','' -replace '\s+',' ').Trim() } else { "Non détecté" }
+# v5.13 : nom court pour la carte Accueil (comme le processeur). Repli : nom complet, puis « Carte graphique ».
+$gpuCourt = if ($gpuNom) { ($gpuNom -replace '\((R|TM)\)','' -replace '\bAMD\b|\bRadeon\b|\bNVIDIA\b|\bGeForce\b|\bGraphics\b|\(pilote non installé\)','' -replace '\s+',' ').Trim() } else { "" }
 if (-not $gpuCourt) { $gpuCourt = $gpuNom }
+function Gpu-SousTitre { if ($gpuCourt) { $gpuCourt } else { T "Carte graphique" } }
 
 # ===================== THÈME =====================
 function Hex($h) { [Drawing.ColorTranslator]::FromHtml($h) }
@@ -1700,7 +1703,7 @@ $badges = @{
   mo = @{ Texte = "IMPACT MOYEN"; Clair = "#a78bfa"; Fonce = "#6d28d9"; Icone = "gauge" }
   lo = @{ Texte = "IMPACT FAIBLE"; Clair = "#9a9aae"; Fonce = "#6b6b80"; Icone = "check" }
 }
-$fBadge = Police 9.5 "Bold"
+$fBadge = Police 9.5 "Regular"   # v5.13 : plus de gras (SÛR, NON RÉVERSIBLE, AVANCÉ, DÉFINITIF, badges d'impact)
 $aidesBadge = @{
   s = "SÛR : réversible avec « Tout annuler »."
   n = "NON RÉVERSIBLE : sans risque pour Windows, mais « Tout annuler » ne peut pas le défaire (applis supprimées ou installées, fichiers effacés)."
@@ -3086,7 +3089,7 @@ function Stat($i, $cle, $valeur, $icone, [switch]$Barre) {
   return @{ Carte = $c; Pct = $p; Val = $v; Barre = $b; Spark = $sp }
 }
 $stCpu = Stat 0 "PROCESSEUR" $cpuCourt "cpu"
-$stGpu = Stat 1 "CARTE GRAPHIQUE" $gpuCourt "monitor"
+$stGpu = Stat 1 "CARTE GRAPHIQUE" (Gpu-SousTitre) "monitor"
 $stRam = Stat 2 "MÉMOIRE" "$ramGo $uGo" "memory"
 $stC   = Stat 3 ((T "DISQUE") + " $($env:SystemDrive)") "" "drive" -Barre
 foreach ($s in $stCpu, $stGpu, $stRam, $stC) { $tip.SetToolTip($s.Carte, (T "Mesures en direct, mises à jour toutes les 1,5 s quand le Tableau de bord est affiché.")) }
@@ -3122,9 +3125,8 @@ function MajStats {
   }
   $tc = if ($script:tempsLhm.Cpu) { $script:tempsLhm.Cpu } elseif ([LkMonitor]::Temp -gt 0) { [LkMonitor]::Temp } else { $null }
   $stCpu.Val.Text = $cpuCourt + $(if ($tc) { " · $tc °C" } else { "" })
-  $vr = [LkMonitor]::Vram; $vTot = if ($gpus.Count) { $gpus[0].VramGo } else { 0 }
-  $txtG = $gpuCourt
-  if ($vr -gt 0) { $txtG = ("VRAM {0:N1}" -f ($vr / 1GB)) + $(if ($vTot) { " / $vTot $uGo" } else { " $uGo" }) }
+  # v5.13 : sous-titre = nom court de la carte (plus la VRAM ; elle reste dans Matériel)
+  $txtG = Gpu-SousTitre
   if ($script:tempsLhm.Gpu) { $txtG += " · $($script:tempsLhm.Gpu) °C" }
   $stGpu.Val.Text = $txtG
   try {
