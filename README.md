@@ -10,17 +10,38 @@ installation) qui rend un PC de jeu plus réactif **sans casser Windows** : chaq
 est expliqué, marqué **SÛR / AVANCÉ / DÉFINITIF**, sauvegardé avant modification et
 annulable en un clic avec **« Tout annuler »**.
 
-> **Statut : v0.1 bêta.** Testée (machine virtuelle Windows 10), mais encore sur peu de PC
-> différents. En cas de souci : Journal > « Exporter le journal », puis ouvre une *issue*
-> avec le fichier.
+> **Statut : v0.1 bêta.** Testée, mais encore sur peu de PC différents. En cas de souci :
+> Journal > « Exporter le journal », puis ouvre une *issue* avec le fichier.
 
 ## Aperçu
 
 <p align="center">
+  <img src="docs/accueil.png" width="820" alt="Tableau de bord de LuKZyR Optimisation : barre latérale, score d'optimisation, profils en 1 clic, moniteur en direct">
+</p>
+<p align="center">
+  <img src="docs/performance.png" width="820" alt="Page Performance de LuKZyR Optimisation avec la barre latérale">
+</p>
+<p align="center">
   <img src="docs/chargement.png" width="440" alt="Écran de chargement de LuKZyR Optimisation">
 </p>
 
-D'autres captures arrivent bientôt.
+## Nouveautés
+
+- **Nouvelle interface avec barre latérale** : logo, recherche (Ctrl+F) dans tous les
+  réglages, une icône par section, encadré « Tout est annulable » avec le bouton
+  « Tout annuler » toujours à portée de main.
+- **Tableau de bord refait** : état du PC, **score d'optimisation** sur 100 (calculé
+  uniquement avec ce qui est lu sur ton PC, sans rien modifier, détail point par point),
+  profils en 1 clic, 4 cartes en direct (processeur, carte graphique, mémoire, disque C:)
+  avec courbe, accès rapide.
+- **Session de jeu** : ferme les applis inutiles pendant que tu joues (OneDrive, Teams,
+  Widgets…) puis les relance à la fin. Rien n'est désinstallé.
+- **Espace disque** : ce qui prend de la place (dossiers personnels, jeux Steam,
+  temporaires…), en lecture seule.
+- **Rapport système** : matériel, pilotes, Windows et réglages appliqués dans un fichier
+  HTML + texte sur le Bureau. Rien n'est envoyé.
+- Interface plus fluide (changements de page sans saccade) et vérification des mises à
+  jour corrigée.
 
 ## Fonctionnalités
 
@@ -40,8 +61,8 @@ D'autres captures arrivent bientôt.
   composants Windows (WinSxS, **jamais** `/ResetBase`).
 - **Applications** : installation depuis les sources officielles (winget) : Steam, Epic
   Games, Ubisoft Connect, Discord, Spotify, Brave, OBS Studio, 7-Zip, VLC…
-- **Système** : applis au démarrage, DNS (Automatique, Cloudflare, Google, Quad9), TRIM,
-  réparation DISM + SFC, Restaurer le système.
+- **Système** : applis au démarrage, DNS (Automatique, Cloudflare, Google, Quad9), espace
+  disque, TRIM, réparation DISM + SFC, Restaurer le système.
 - **Matériel** : composants détectés, pilotes officiels, santé des disques, température,
   guide BIOS adapté à la carte mère détectée (rien n'est jamais modifié dans le BIOS).
 - Thème clair / sombre, français / anglais, animations douces et économes : un seul
@@ -62,13 +83,16 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le zip de la dernière version dans
+1. Télécharge `LuKZyR-Optimisation-v0.1-beta.zip` dans
    [Releases](https://github.com/LuKZyR/LuKZyR-Optimisation/releases) et **dézippe tout
    le dossier** (ne lance pas depuis le zip).
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.
 3. L'exe n'est pas signé : SmartScreen peut afficher un avertissement
    (« Informations complémentaires » > « Exécuter quand même »).
+
+L'appli vérifie elle-même s'il existe une nouvelle version (fichier `version.json` de ce
+dépôt) et ne se met jamais à jour sans ton accord.
 
 ### Depuis les sources
 
@@ -91,6 +115,7 @@ assets\                   Logo et icône
 assets\source-lanceur\    Source C# du lanceur et de l'écran de chargement, Compiler-Lanceur.bat, logo d'origine
 guides\                   Guide BIOS générique
 docs\                     Captures d'écran
+version.json              Dernière version publiée (vérification des mises à jour)
 LISEZ-MOI.txt             Mode d'emploi détaillé (aussi fourni dans le zip)
 ```
 
