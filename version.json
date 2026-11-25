@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.12",
+  "build": "5.13",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.12) : nouveau bouton « Signaler un bug (Discord) » dans Paramètres, et le lien du serveur Discord dans les messages de plantage.",
-  "sha256": "be967b36a34524acd1e72edd37725a8fd20cec469b12dabff94deed0c5e16257"
+  "notes": "v0.1 bêta (build 5.13) : la carte « Carte graphique » du Tableau de bord affiche le nom de la carte (au lieu de la mémoire vidéo), et les badges d'état (SÛR, NON RÉVERSIBLE, DÉFINITIF...) ne sont plus en gras.",
+  "sha256": "74f62bb33ee1a3c28ebf35efc8cff3d0f1604a0a397851902f5264bac9ba7e4b"
 }
