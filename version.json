@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.8",
+  "build": "5.9",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.8) : nouvelle interface avec barre latérale, tableau de bord avec score d'optimisation, profils en 1 clic, moniteur en direct et accès rapide.",
-  "sha256": ""
+  "notes": "v0.1 bêta (build 5.9) : correctif du démarrage (« Les composants de l'interface n'ont pas pu être compilés ») et message d'erreur détaillé en cas de plantage.",
+  "sha256": "ec7a0a71a8bc9ad936c052f6e0a34ddc96600d4f8a3449dca7f1e8059d520d1b"
 }
