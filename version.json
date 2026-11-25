@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.10",
+  "build": "5.11",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.10) : correctif du plantage au changement de page (OverflowException), dessin des contrôles sécurisé, erreurs de l'interface écrites dans un journal au lieu d'arrêter l'appli.",
-  "sha256": "bdc73ca7d454f35b29725c48f6316fe7b6c9ba2fcf93813cfe863c24242439b0"
+  "notes": "v0.1 bêta (build 5.11) : les réglages protégés par Windows 11 (widgets, fil d'actualités) sont signalés « ignoré » au lieu d'une erreur, avec un réglage de repli pour masquer les widgets.",
+  "sha256": "c29372fec56634ce14a51672fc63c24ce0fd9a096f5192fc54ebdbebef70b4c5"
 }
