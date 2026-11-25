@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.9)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.10)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.9
-$VersionInterne = "5.9"
+$VersionBeta = $true         # v0.1 bêta = version interne 5.10
+$VersionInterne = "5.10"   # comparé comme [version] : 5.10 > 5.9
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -38,6 +38,9 @@ function Plantage-Demarrage($texte, $details) {
 # (pas de « trap » global : il interromprait des fonctions qui continuent normalement après une petite erreur ;
 #  les plantages non prévus sont signalés par le lanceur, qui lit la sortie d'erreur de PowerShell)
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+# v5.10 : une erreur dans l'interface (dessin d'un contrôle...) ne doit plus afficher la boîte « exception non gérée »
+#         de WinForms : mode « capturer » réglé AVANT la 1re fenêtre ; le gestionnaire (LkSafe) est branché après la compilation
+try { [System.Windows.Forms.Application]::SetUnhandledExceptionMode([System.Windows.Forms.UnhandledExceptionMode]::CatchException) } catch {}
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     # v5.6 : UAC refusé = message clair (avant : rien ne se passait)
     $extra = if ($TestAuto) { " -TestAuto" } else { "" }
@@ -58,6 +61,35 @@ $erreursCompil = @(); $exceptionCompil = $null
 try { Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -IgnoreWarnings -ErrorAction SilentlyContinue -ErrorVariable erreursCompil -TypeDefinition @"
 using System; using System.Drawing; using System.Drawing.Drawing2D; using System.Drawing.Text; using System.Windows.Forms;
 using System.Runtime.InteropServices; using System.Collections.Concurrent; using System.Collections.Generic; using System.Diagnostics; using System.Text;
+
+// v5.10 : filet de sécurité. Une erreur de dessin (ou toute erreur non gérée de l'interface) est écrite dans
+// C:\ProgramData\Lukzyr\erreurs-interface.txt et l'appli continue (avant : boîte « exception non gérée » de WinForms).
+public static class LkSafe {
+  public static string Journal = null; public static int Erreurs = 0, Dessins = 0; public static string Derniere = "";
+  static readonly object verrou = new object(); static Dictionary<string, int> vus = new Dictionary<string, int>(); static bool installe;
+  public static void Noter(string quoi, Exception ex) {
+    try {
+      lock (verrou) {
+        Erreurs++; Derniere = quoi + " : " + (ex == null ? "?" : ex.GetType().Name + " " + ex.Message);
+        string cle = quoi + "|" + (ex == null ? "" : ex.GetType().FullName + "|" + ex.Message); int n; vus.TryGetValue(cle, out n); vus[cle] = n + 1;
+        if (n >= 3 || Erreurs > 300 || string.IsNullOrEmpty(Journal)) return;   // la même erreur 3 fois maximum (pas d'avalanche à 60 images/s)
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Journal));
+        System.IO.File.AppendAllText(Journal, "[" + DateTime.Now.ToString("s") + "] " + quoi + "\r\n" + (ex == null ? "" : ex.ToString()) + "\r\n\r\n", Encoding.UTF8);
+      }
+    } catch { }
+  }
+  // appelé par chaque OnPaint / OnPaintBackground des contrôles Lk* : on note, on efface proprement, on continue
+  public static void Paint(Control c, Exception ex, PaintEventArgs e) {
+    Dessins++; Noter("Dessin " + (c == null ? "?" : c.GetType().Name), ex);
+    try { if (c != null && e != null) e.Graphics.Clear(LkCard.BackOf(c)); } catch { }
+    try { LkFade f = c as LkFade; if (f != null && f.IsHandleCreated && !f.IsDisposed) f.BeginInvoke((MethodInvoker)delegate { try { f.Stop(); } catch { } }); } catch { }
+  }
+  public static void Installer(string journal) {
+    Journal = journal; if (installe) return; installe = true;
+    Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs a) { Noter("Erreur non gérée de l'interface (l'appli continue)", a.Exception); };
+    AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs a) { Noter("Erreur non gérée" + (a.IsTerminating ? " (arrêt)" : ""), a.ExceptionObject as Exception); };
+  }
+}
 
 public static class LkNative {
   [DllImport("user32.dll")] public static extern bool ReleaseCapture();
@@ -123,7 +155,11 @@ public static class LkNative {
   // Gèle / dégèle le dessin d'un conteneur (WM_SETREDRAW) : échange de pages en une seule image
   public static void Redraw(Control c, bool on) { SendMessage(c.Handle, 0x0B, (IntPtr)(on ? 1 : 0), IntPtr.Zero); if (on) c.Refresh(); }
   public static void Drag(Form f) { ReleaseCapture(); SendMessage(f.Handle, 0xA1, (IntPtr)2, IntPtr.Zero); }
+  // v5.10 : rectangle utilisable par LinearGradientBrush (largeur et hauteur >= 1, jamais NaN / infini)
+  public static float Fini(float v) { return float.IsNaN(v) || float.IsInfinity(v) ? 0f : Math.Max(-100000f, Math.Min(100000f, v)); }
+  public static RectangleF R1(RectangleF r) { return new RectangleF(Fini(r.X), Fini(r.Y), Math.Max(1f, Fini(r.Width)), Math.Max(1f, Fini(r.Height))); }
   public static GraphicsPath Round(RectangleF r, float rad) {
+    r = new RectangleF(Fini(r.X), Fini(r.Y), Math.Max(0f, Fini(r.Width)), Math.Max(0f, Fini(r.Height))); rad = Math.Max(0f, Fini(rad));
     GraphicsPath p = new GraphicsPath(); float d = Math.Min(rad * 2, Math.Min(r.Width, r.Height));
     if (d < 1) { p.AddRectangle(r); return p; }
     p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
@@ -180,7 +216,7 @@ public static class LkAnim {
     if (l.Count == 0) return;
     int n = l.Count; int[] cible = new int[n]; int[] pose = new int[n]; bool[] fini = new bool[n];
     for (int k = 0; k < n; k++) { cible[k] = l[k].Top; pose[k] = cible[k] + dy; l[k].Top = pose[k]; }
-    int dur = (int)(ms * Lent); Stopwatch sw = Stopwatch.StartNew();
+    int dur = Math.Max(1, (int)(ms * Lent)); Stopwatch sw = Stopwatch.StartNew();
     Add(() => {
       bool reste = false; long el = sw.ElapsedMilliseconds;
       for (int k = 0; k < n; k++) {
@@ -201,18 +237,19 @@ public static class LkAnim {
   public static void TweenQ(int ms, Action<float> apply, Action done) {
     if (!On || ms <= 0) { apply(1f); if (done != null) done(); return; }
     if (Reduit) ms = Math.Min(ms, 120);
-    ms = (int)(ms * Lent); Stopwatch sw = Stopwatch.StartNew(); apply(0f);
+    ms = Math.Max(1, (int)(ms * Lent)); Stopwatch sw = Stopwatch.StartNew(); apply(0f);
     Add(() => { float p = Math.Min(1f, (float)sw.ElapsedMilliseconds / ms); apply(Ease5(p)); if (p >= 1f) { if (done != null) done(); return false; } return true; });
   }
   public static Color Mix(Color a, Color b, float p) {
-    if (p <= 0f) return a; if (p >= 1f) return b;
-    return Color.FromArgb((int)(a.A + (b.A - a.A) * p), (int)(a.R + (b.R - a.R) * p), (int)(a.G + (b.G - a.G) * p), (int)(a.B + (b.B - a.B) * p));
+    if (float.IsNaN(p) || p <= 0f) return a; if (p >= 1f) return b;   // v5.10 : NaN -> a (avant : exception dans Color.FromArgb)
+    return Color.FromArgb(C255(a.A + (b.A - a.A) * p), C255(a.R + (b.R - a.R) * p), C255(a.G + (b.G - a.G) * p), C255(a.B + (b.B - a.B) * p));
   }
+  public static int C255(float v) { return float.IsNaN(v) ? 0 : (int)Math.Max(0f, Math.Min(255f, v)); }
   // Interpolation de 0 à 1 (adoucie) sur ms millisecondes ; apply(p) est appelée à chaque image
   public static void Tween(int ms, Action<float> apply, Action done) {
     if (!On || ms <= 0) { apply(1f); if (done != null) done(); return; }
     if (Reduit) ms = Math.Min(ms, 120);
-    ms = (int)(ms * Lent);
+    ms = Math.Max(1, (int)(ms * Lent));
     Stopwatch sw = Stopwatch.StartNew();
     apply(0f);
     Add(() => {
@@ -272,12 +309,13 @@ public static class LkAnim {
 public class LkIndicator : Control {
   public Color Fill = Color.FromArgb(167, 139, 250); public Color Fill2 = Color.Empty;
   public LkIndicator() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(Parent != null ? Parent.BackColor : BackColor); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(Parent != null ? Parent.BackColor : BackColor); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
     if (Width < 2 || Height < 1) return;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 1, Height - 1), (Math.Min(Width, Height) - 1) / 2f))
-    using (Brush b = Fill2.IsEmpty ? (Brush)new SolidBrush(Fill) : new LinearGradientBrush(new RectangleF(-1, 0, Width + 2, Height), Fill2, Fill, 0f)) e.Graphics.FillPath(b, p);
+    using (Brush b = Fill2.IsEmpty ? (Brush)new SolidBrush(Fill) : new LinearGradientBrush(LkNative.R1(new RectangleF(-1, 0, Width + 2, Height)), Fill2, Fill, 0f)) e.Graphics.FillPath(b, p);
   }
 }
 
@@ -320,8 +358,9 @@ public class LkCard : Panel {
     LkAnim.Tween(160, p => { if (my != tok) return; shown = LkAnim.Mix(from, to, p); hp = h0 + (h1 - h0) * p; Sync(); }, null);
   }
   void Sync() { Color c0 = CurrentFill; foreach (Control c in Controls) { if (c is Label) c.BackColor = c0; else c.Invalidate(); } Invalidate(); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 0.5f, Height - 0.5f), Radius))
     using (SolidBrush b = new SolidBrush(CurrentFill)) e.Graphics.FillPath(b, p);
@@ -349,8 +388,9 @@ public class LkToggle : Control {
     LkAnim.Tween(170, p => { if (my != tok) return; pos = from + (to - from) * p; Invalidate(); }, null);
   }
   protected override void OnClick(EventArgs e) { Checked = !Checked; base.OnClick(e); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
     float h = Height - 1, w = Width - 1;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, w, h), h / 2)) using (SolidBrush b = new SolidBrush(LkAnim.Mix(OffColor, OnColor, pos))) g.FillPath(b, p);
@@ -386,17 +426,18 @@ public class LkBar : Control {
   }
   protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); Lancer(); }
   protected override void OnParentChanged(EventArgs e) { base.OnParentChanged(e); Lancer(); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; float r = Height / 2f;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 1, Height - 1), r)) using (SolidBrush b = new SolidBrush(Track)) g.FillPath(b, p);
     float w = (Width - 1) * shown / 100f;
-    if (w >= 1) { if (w < Height) w = Height; using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, w, Height - 1), r)) using (Brush b = Fill2.IsEmpty ? (Brush)new SolidBrush(Fill) : new LinearGradientBrush(new RectangleF(-1, 0, Width + 2, Height), Fill2, Fill, 0f)) g.FillPath(b, p); }
+    if (w >= 1) { if (w < Height) w = Height; using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, w, Height - 1), r)) using (Brush b = Fill2.IsEmpty ? (Brush)new SolidBrush(Fill) : new LinearGradientBrush(LkNative.R1(new RectangleF(-1, 0, Width + 2, Height)), Fill2, Fill, 0f)) g.FillPath(b, p); }
     if (busy && LkAnim.On) {
       float sw = (Width - 1) * 0.22f, x = -sw + (Width - 1 + sw) * phase;
       using (GraphicsPath clip = LkNative.Round(new RectangleF(0, 0, Width - 1, Height - 1), r)) {
         g.SetClip(clip);
-        using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(x - 1, 0, sw + 2, Height), Color.FromArgb(0, 200, 180, 255), Color.FromArgb(0, 200, 180, 255), 0f)) {
+        using (LinearGradientBrush lb = new LinearGradientBrush(LkNative.R1(new RectangleF(x - 1, 0, sw + 2, Height)), Color.FromArgb(0, 200, 180, 255), Color.FromArgb(0, 200, 180, 255), 0f)) {
           ColorBlend cb = new ColorBlend(3); cb.Colors = new Color[] { Color.FromArgb(0, 200, 180, 255), Color.FromArgb(230, 200, 180, 255), Color.FromArgb(0, 200, 180, 255) }; cb.Positions = new float[] { 0f, 0.5f, 1f };
           lb.InterpolationColors = cb; g.FillRectangle(lb, x, 0, sw, Height);
         }
@@ -437,8 +478,9 @@ public class LkButton : Control {
   protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
   public void PerformClick() { if (Enabled) OnClick(EventArgs.Empty); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
     Color c; string txt = Text;
     if (busy) {
@@ -450,7 +492,7 @@ public class LkButton : Control {
     using (GraphicsPath p = LkNative.Round(rc, Radius)) {
       if (!Fill2.IsEmpty && Enabled && rc.Width > 2) {
         Color c2 = LkAnim.Mix(Fill2, Color.Black, h * 0.12f + (pressed ? 0.12f : 0f));
-        using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(rc.X - 1, rc.Y, rc.Width + 2, rc.Height), c2, c, 0f)) g.FillPath(b, p);
+        using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(rc.X - 1, rc.Y, rc.Width + 2, rc.Height)), c2, c, 0f)) g.FillPath(b, p);
       } else using (SolidBrush b = new SolidBrush(c)) g.FillPath(b, p);
     }
     Color fc = (Enabled || busy) ? ForeColor : Color.FromArgb(190, 190, 210);
@@ -520,7 +562,8 @@ public class LkScroll : Panel, IMessageFilter {
     if (!RectangleToScreen(ClientRectangle).Contains(Cursor.Position)) return false;
     int delta = (short)((long)m.WParam >> 16); ScrollSmooth((glisse ? target : off) - delta * Step / 120); return true;
   }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     e.Graphics.Clear(BackColor);
     if (Content.Height <= Height) return;
     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -541,8 +584,9 @@ public class LkBadge : Control {
   public LkBadge() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
   public Color Ink { get { return (Light && !AccentLight.IsEmpty) ? AccentLight : Accent; } }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
     Color k = Ink;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 1, Height - 1), Radius)) using (SolidBrush b = new SolidBrush(Color.FromArgb(Light ? Alpha + 6 : Alpha, k))) g.FillPath(b, p);
@@ -674,11 +718,13 @@ public class LkIcon : Control {
   public Color Chip = Color.Empty; public int ChipAlpha = 34; public float Radius = 9; public float IconSize = 0; public float Stroke = 1.6f;
   public LkIcon() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true); }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
-  protected override void OnPaintBackground(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { PeindreFondLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreFondLk(PaintEventArgs e) {
     LkCard k = Parent as LkCard;
     if (k != null) e.Graphics.Clear(k.CurrentFill); else if (BackColor.A == 255) e.Graphics.Clear(BackColor); else base.OnPaintBackground(e);
   }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
     if (!Chip.IsEmpty && Chips) {
       float cs = Math.Min(Width, Height) - 1;
@@ -697,7 +743,7 @@ public class LkTint : Panel {
   public Color Accent = Color.FromArgb(245, 158, 11); public int Radius = 12;
   public void Apparaitre() { }
   public LkTint() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.SupportsTransparentBackColor, true); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
 }
 
 // Grand bandeau violet du Tableau de bord (dégradé + halo), identique en thème clair et sombre
@@ -715,8 +761,9 @@ public class LkHero : Panel {
   // v5.7 : fond de carte + bordure + halo (Fill vide = ancien rendu à plat)
   public Color Fill = Color.Empty, Border = Color.Empty, Glow = Color.FromArgb(140, 82, 255), Glow2 = Color.FromArgb(18, 224, 255); public Rectangle GlowRect = Rectangle.Empty; public int GlowAlpha = 46;
   protected override CreateParams CreateParams { get { CreateParams cp = base.CreateParams; if (LkCard.Compose) cp.ExStyle |= 0x02000000; return cp; } }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
     if (!Fill.IsEmpty) {
       using (GraphicsPath p = LkNative.Round(new RectangleF(0, 0, Width - 0.5f, Height - 0.5f), Radius)) {
@@ -740,7 +787,7 @@ public class LkHero : Panel {
       Color tr = LkBadge.Light ? Color.FromArgb(228, 228, 234) : Color.FromArgb(36, 36, 44);
       using (GraphicsPath t = LkNative.Round(pr, rr)) using (SolidBrush b = new SolidBrush(tr)) g.FillPath(b, t);
       float w = pr.Width * Math.Max(0f, Math.Min(100f, progShown)) / 100f;
-      if (w >= 1) { if (w < pr.Height) w = pr.Height; using (GraphicsPath t = LkNative.Round(new RectangleF(pr.X, pr.Y, w, pr.Height), rr)) using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(pr.X - 1, pr.Y, pr.Width + 2, pr.Height), Color.FromArgb(18, 224, 255), Color.FromArgb(140, 82, 255), 0f)) g.FillPath(b, t); }
+      if (w >= 1) { if (w < pr.Height) w = pr.Height; using (GraphicsPath t = LkNative.Round(new RectangleF(pr.X, pr.Y, w, pr.Height), rr)) using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(pr.X - 1, pr.Y, pr.Width + 2, pr.Height)), Color.FromArgb(18, 224, 255), Color.FromArgb(140, 82, 255), 0f)) g.FillPath(b, t); }
     }
   }
 }
@@ -758,17 +805,18 @@ public class LkNav : Control {
   protected override void OnMouseEnter(EventArgs e) { Survol(1f); base.OnMouseEnter(e); }
   protected override void OnMouseLeave(EventArgs e) { Survol(0f); base.OnMouseLeave(e); }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
     Color fond = LkCard.BackOf(this);
     RectangleF r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
     if (active) {
       using (GraphicsPath p = LkNative.Round(r, Radius))
-      using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, 0, Width + 1, Height), ActiveFill, LkAnim.Mix(ActiveFill, fond, 0.55f), 0f)) g.FillPath(b, p);
+      using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(0, 0, Width + 1, Height)), ActiveFill, LkAnim.Mix(ActiveFill, fond, 0.55f), 0f)) g.FillPath(b, p);
       float bw = Math.Max(3f, Height * 0.08f), bh = Height * 0.5f, by = (Height - bh) / 2f;
       using (GraphicsPath p = LkNative.Round(new RectangleF(0, by, bw, bh), bw / 2f))
-      using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, by - 1, bw, bh + 2), Accent, Accent2, 90f)) g.FillPath(b, p);
+      using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(0, by - 1, bw, bh + 2)), Accent, Accent2, 90f)) g.FillPath(b, p);
     } else if (h > 0.01f) using (GraphicsPath p = LkNative.Round(r, Radius)) using (SolidBrush b = new SolidBrush(LkAnim.Mix(fond, HoverFill, h))) g.FillPath(b, p);
     Color fc = active ? ActiveFore : LkAnim.Mix(ForeColor, ActiveFore, h * 0.75f);
     float x0 = Height * 0.36f;
@@ -787,8 +835,9 @@ public class LkPill : Control {
   protected override void OnMouseEnter(EventArgs e) { Survol(1f); base.OnMouseEnter(e); }
   protected override void OnMouseLeave(EventArgs e) { Survol(0f); base.OnMouseLeave(e); }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
     bool L = LkBadge.Light;
     Color acc = L ? Color.FromArgb(124, 77, 255) : Color.FromArgb(167, 139, 250);
@@ -832,13 +881,14 @@ public class LkOrb : Control {
   }
   void PaintScore(Graphics g, bool L) {
     float cx = Width / 2f, cy = Height / 2f, R = Math.Min(Width, Height) / 2f - 2f, w = Math.Max(4f, R * 0.15f), rr = R - w / 2f;
+    if (R < 8f || rr - w < 2f) return;   // v5.10 : trop petit pour l'anneau (rectangles négatifs -> exception GDI+)
     float ph = LkAnim.On && busy ? phase : 0f;
     Color piste = L ? Color.FromArgb(228, 228, 236) : Color.FromArgb(40, 40, 50);
     piste = LkAnim.Mix(piste, L ? Color.FromArgb(210, 200, 250) : Color.FromArgb(62, 50, 110), ph * 0.6f);
     RectangleF rc = new RectangleF(cx - rr, cy - rr, rr * 2, rr * 2);
     using (Pen tr = new Pen(piste, w)) g.DrawEllipse(tr, rc);
     float frac = progShown >= 0f ? progShown : scoreShown;
-    if (frac > 0.003f) using (LinearGradientBrush gb = new LinearGradientBrush(new RectangleF(cx - R, cy - R, R * 2, R * 2), Color.FromArgb(18, 224, 255), Color.FromArgb(140, 82, 255), 135f))
+    if (frac > 0.003f) using (LinearGradientBrush gb = new LinearGradientBrush(LkNative.R1(new RectangleF(cx - R, cy - R, R * 2, R * 2)), Color.FromArgb(18, 224, 255), Color.FromArgb(140, 82, 255), 135f))
       using (Pen pn = new Pen(gb, w)) { pn.StartCap = LineCap.Round; pn.EndCap = LineCap.Round; g.DrawArc(pn, rc, -90f, 360f * Math.Min(1f, frac)); }
     string t = Text; if (busy && LkAnim.On) t = Text.TrimEnd('.', ' ') + new string('.', dots).PadRight(3);
     StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center;
@@ -870,22 +920,24 @@ public class LkOrb : Control {
   protected override void OnMouseLeave(EventArgs e) { Survol(0f); base.OnMouseLeave(e); }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
   public void PerformClick() { if (Enabled) OnClick(EventArgs.Empty); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     // v5.4 (épuré) : disque plein violet, anneau fin qui respire très doucement, anneau de progression
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
     bool L = LkBadge.Light;
     if (Score >= 0f) { PaintScore(g, L); return; }
     Color acc = Color.FromArgb(140, 82, 255);
     float cx = Width / 2f, cy = Height / 2f, R = Math.Min(Width, Height) / 2f - 2;
+    if (R < 4f) return;   // v5.10 : trop petit pour être dessiné
     float ph = LkAnim.On ? phase : 0f;
     float rp = R * 0.94f, w = Math.Max(2f, R * 0.035f);
     Color piste = L ? Color.FromArgb(226, 222, 245) : Color.FromArgb(40, 34, 64);
     using (Pen tr = new Pen(LkAnim.Mix(piste, Color.FromArgb(L ? 205 : 62, L ? 196 : 50, L ? 245 : 110), busy ? ph : ph * 0.5f), w)) g.DrawEllipse(tr, cx - rp, cy - rp, rp * 2, rp * 2);
-    if (progShown >= 0f && progShown > 0.002f) using (LinearGradientBrush gb = new LinearGradientBrush(new RectangleF(cx - rp - 2, cy - rp - 2, rp * 2 + 4, rp * 2 + 4), Color.FromArgb(18, 224, 255), Color.FromArgb(167, 139, 250), 45f)) using (Pen pn = new Pen(gb, w * 1.6f)) { pn.StartCap = LineCap.Round; pn.EndCap = LineCap.Round; g.DrawArc(pn, cx - rp, cy - rp, rp * 2, rp * 2, -90f, 360f * progShown); }
+    if (progShown >= 0f && progShown > 0.002f) using (LinearGradientBrush gb = new LinearGradientBrush(LkNative.R1(new RectangleF(cx - rp - 2, cy - rp - 2, rp * 2 + 4, rp * 2 + 4)), Color.FromArgb(18, 224, 255), Color.FromArgb(167, 139, 250), 45f)) using (Pen pn = new Pen(gb, w * 1.6f)) { pn.StartCap = LineCap.Round; pn.EndCap = LineCap.Round; g.DrawArc(pn, cx - rp, cy - rp, rp * 2, rp * 2, -90f, 360f * progShown); }
     float ri = R * (0.78f + 0.015f * h);
     Color fill = busy ? LkAnim.Mix(acc, Color.FromArgb(160, 112, 255), ph * 0.6f) : LkAnim.Mix(acc, Color.FromArgb(122, 64, 238), h);
     Color fill2 = LkAnim.Mix(Color.FromArgb(76, 110, 255), Color.FromArgb(60, 92, 240), busy ? 0f : h);
-    using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(cx - ri - 1, cy - ri - 1, ri * 2 + 2, ri * 2 + 2), fill2, fill, 45f)) g.FillEllipse(b, cx - ri, cy - ri, ri * 2, ri * 2);
+    using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(cx - ri - 1, cy - ri - 1, ri * 2 + 2, ri * 2 + 2)), fill2, fill, 45f)) g.FillEllipse(b, cx - ri, cy - ri, ri * 2, ri * 2);
     string t = Text; if (busy && LkAnim.On) t = Text.TrimEnd('.', ' ') + new string('.', dots).PadRight(3);
     StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center;
     using (SolidBrush b = new SolidBrush(Color.White)) g.DrawString(t, Font, b, new RectangleF(cx - ri, cy - ri * 0.55f, ri * 2, ri * 0.7f), sf);
@@ -898,12 +950,13 @@ public class LkSection : Control {
   public Color Line = Color.FromArgb(37, 37, 45); public Color A1 = Color.FromArgb(18, 224, 255), A2 = Color.FromArgb(140, 82, 255);
   public LkSection() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
   protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
     float bh = Height * 0.62f, bw = Math.Max(3f, Height * 0.16f), by = (Height - bh) / 2f;
     using (GraphicsPath p = LkNative.Round(new RectangleF(0, by, bw, bh), bw / 2f))
-    using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, by - 1, bw, bh + 2), A1, A2, 90f)) g.FillPath(b, p);
+    using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(0, by - 1, bw, bh + 2)), A1, A2, 90f)) g.FillPath(b, p);
     int x = (int)(bw + Height * 0.45f);
     TextFormatFlags tf = TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding;
     int tw = TextRenderer.MeasureText(g, Text, Font, Size.Empty, tf).Width;
@@ -919,17 +972,18 @@ public class LkSpark : Control {
   public LkSpark() { SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true); }
   public void Push(int x) { if (x < 0) return; x = Math.Max(0, Math.Min(100, x)); if (n < v.Length) v[n++] = x; else { Array.Copy(v, 1, v, 0, v.Length - 1); v[v.Length - 1] = x; } Invalidate(); }
   public void Clear() { n = 0; Invalidate(); }
-  protected override void OnPaintBackground(PaintEventArgs e) { e.Graphics.Clear(LkCard.BackOf(this)); }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaintBackground(PaintEventArgs e) { try { e.Graphics.Clear(LkCard.BackOf(this)); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     if (n < 2 || Width < 4 || Height < 4) return;
     Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
     float dx = (Width - 2f) / (v.Length - 1), h = Height - 3f; PointF[] pts = new PointF[n];
     for (int i = 0; i < n; i++) pts[i] = new PointF(1 + (v.Length - n + i) * dx, 1.5f + h * (1f - v[i] / 100f));
     using (GraphicsPath f = new GraphicsPath()) {
       f.AddLines(pts); f.AddLine(pts[n - 1].X, pts[n - 1].Y, pts[n - 1].X, Height); f.AddLine(pts[n - 1].X, Height, pts[0].X, Height); f.CloseFigure();
-      using (LinearGradientBrush b = new LinearGradientBrush(new RectangleF(0, 0, Width, Height + 1), Color.FromArgb(46, A2), Color.FromArgb(0, A2), 90f)) g.FillPath(b, f);
+      using (LinearGradientBrush b = new LinearGradientBrush(LkNative.R1(new RectangleF(0, 0, Width, Height + 1)), Color.FromArgb(46, A2), Color.FromArgb(0, A2), 90f)) g.FillPath(b, f);
     }
-    using (LinearGradientBrush lb = new LinearGradientBrush(new RectangleF(-1, 0, Width + 2, Height), A1, A2, 0f)) using (Pen p = new Pen(lb, Math.Max(1.5f, Height / 22f))) { p.LineJoin = LineJoin.Round; g.DrawLines(p, pts); }
+    using (LinearGradientBrush lb = new LinearGradientBrush(LkNative.R1(new RectangleF(-1, 0, Width + 2, Height)), A1, A2, 0f)) using (Pen p = new Pen(lb, Math.Max(1.5f, Height / 22f))) { p.LineJoin = LineJoin.Round; g.DrawLines(p, pts); }
   }
 }
 
@@ -979,26 +1033,38 @@ public class LkFade : Control {
         items.Add(new It { B = bm, R = new Rectangle(c.Left, c.Top + oy, c.Width, c.Height), K = k });
       }
     } catch (Exception) { Erreurs++; Stop(); return false; }
+    // v5.10 : durée par défaut AVANT d'être visible. Redraw(main, true) -> Refresh() peint le fondu tout de suite,
+    // avant Play() : avec dur = 0, (0 - 0) / 0 = NaN -> y = int.MinValue -> OverflowException dans DrawImage (plantage 5.8/5.9).
+    dur = 230; pas = 26; sw = null;
     bg = fond; dy = decalage; Bounds = page.Bounds; BringToFront(); Visible = true; return true;
   }
   public void Play(int ms, int pasMs) {
     if (items.Count == 0) { Stop(); return; }
-    dur = Math.Max(1, (int)(ms * LkAnim.Lent)); pas = (int)(pasMs * LkAnim.Lent); sw = Stopwatch.StartNew(); int my = ++tok;
+    dur = Math.Max(1, (int)(ms * LkAnim.Lent)); pas = Math.Max(0, (int)(pasMs * LkAnim.Lent)); sw = Stopwatch.StartNew(); int my = ++tok;
     LkAnim.Add(() => {
       if (my != tok || IsDisposed) return false;
       if (sw.ElapsedMilliseconds >= dur + kmax * pas + 16) { Stop(); return false; }
       Invalidate(); return true;
     });
   }
-  protected override void OnPaint(PaintEventArgs e) {
+  protected override void OnPaint(PaintEventArgs e) { try { PeindreLk(e); } catch (Exception ex) { LkSafe.Paint(this, ex, e); } }   // v5.10
+  void PeindreLk(PaintEventArgs e) {
     Graphics g = e.Graphics; g.Clear(bg);
     g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half; g.CompositingQuality = CompositingQuality.HighSpeed;
     long el = sw == null ? 0 : sw.ElapsedMilliseconds;
-    foreach (It i in items) {
-      float p = Math.Max(0f, Math.Min(1f, (float)(el - i.K * pas) / dur)); float q = LkAnim.Ease(p);
-      int y = i.R.Y + (int)Math.Round(dy * (1f - q));
-      g.DrawImage(i.B, new Rectangle(i.R.X, y, i.R.Width, i.R.Height), 0, 0, i.R.Width, i.R.Height, GraphicsUnit.Pixel);
-      if (q < 0.999f) using (SolidBrush b = new SolidBrush(Color.FromArgb((int)(255 * (1f - q)), bg))) g.FillRectangle(b, i.R.X, y, i.R.Width, i.R.Height);
+    int d = Math.Max(1, dur), lim = Math.Max(Width, Height) + 4096;
+    foreach (It i in items.ToArray()) {
+      // v5.10 : image absente / libérée / vide : ignorée ; toutes les valeurs bornées (jamais NaN ni hors limites)
+      if (i == null || i.B == null || i.R.Width <= 0 || i.R.Height <= 0) continue;
+      int bw, bh; try { bw = i.B.Width; bh = i.B.Height; } catch { continue; }   // Bitmap libéré -> ArgumentException
+      if (bw <= 0 || bh <= 0) continue;
+      float p = (float)(el - (long)i.K * pas) / d; if (float.IsNaN(p)) p = 1f; p = Math.Max(0f, Math.Min(1f, p));
+      float q = LkAnim.Ease(p); if (float.IsNaN(q)) q = 1f; q = Math.Max(0f, Math.Min(1f, q));
+      int y = i.R.Y + (int)Math.Round(Math.Max(-1000f, Math.Min(1000f, dy * (1f - q))));
+      if (i.R.X > lim || i.R.X < -lim || y > lim || y < -lim) continue;
+      int w = Math.Min(i.R.Width, bw), h = Math.Min(i.R.Height, bh);
+      g.DrawImage(i.B, new Rectangle(i.R.X, y, w, h), 0, 0, w, h, GraphicsUnit.Pixel);
+      if (q < 0.999f) using (SolidBrush b = new SolidBrush(Color.FromArgb(LkAnim.C255(255f * (1f - q)), bg))) g.FillRectangle(b, i.R.X, y, w, h);
     }
   }
 }
@@ -1158,6 +1224,8 @@ if (-not ("LkProc" -as [type]) -or -not ("LkAnim" -as [type])) {
   if ($lignes.Count -eq 0) { $lignes.Add("(aucun message du compilateur : types LkProc / LkAnim introuvables après Add-Type)") }
   Plantage-Demarrage "Les composants de l'interface n'ont pas pu être compilés." ($lignes -join "`r`n")
 }
+# v5.10 : erreurs de dessin et erreurs non gérées de l'interface -> journal, l'appli continue
+try { [LkSafe]::Installer((Join-Path $env:ProgramData "Lukzyr\erreurs-interface.txt")) } catch {}
 $dir    = Split-Path -Parent $PSCommandPath
 $racine = Split-Path -Parent $dir
 $ErrorActionPreference = "SilentlyContinue"

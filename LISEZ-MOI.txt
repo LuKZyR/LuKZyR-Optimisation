@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.9). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.10). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -150,13 +150,13 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.9",
+           "build": "5.10",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
          }
   "version" est le numéro public, "build" le numéro interne : tant que la version
-  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (5.9 > 5.8).
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.10 > 5.9 > 5.8).
   Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
   téléchargé est vérifié et supprimé s'il ne correspond pas.
   Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
@@ -218,6 +218,18 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+CORRECTIF v0.1 bêta (version interne 5.10)
+  - Plantage au 1er changement de page réparé (« System.OverflowException » dans
+    LkFade.OnPaint) : le fondu des pages était dessiné une fois avant d'avoir sa durée
+    (division 0/0), ce qui donnait une position hors limites. Corrigé, et toutes les
+    valeurs du fondu sont maintenant bornées.
+  - Tous les contrôles dessinés (cartes, boutons, anneau de score, barres, icônes...)
+    vérifiés aux tailles 0x0, 1x1, petites et grandes ; les cas limites (dégradé de
+    hauteur 0, anneau trop petit, couleur calculée sur une valeur invalide) sont gérés.
+  - Filet de sécurité : si un dessin ou une action de l'interface échoue quand même,
+    l'erreur est écrite dans C:\ProgramData\Lukzyr\erreurs-interface.txt et l'appli
+    continue (plus de boîte « exception non gérée »). Envoie ce fichier en cas de souci.
 
 CORRECTIF v0.1 bêta (version interne 5.9)
   - Démarrage réparé : la 5.8 s'arrêtait avec « Les composants de l'interface n'ont pas
