@@ -1,0 +1,32 @@
+GUIDE BIOS GÉNÉRIQUE - HelixFlux Optimisation v3.1
+================================================
+Ce fichier est un guide de secours, valable pour toutes les cartes mères.
+Pour un guide adapté à TA carte mère (touche, menus, état de ta RAM, de
+Resizable BAR, du TPM...), ouvre HelixFlux Optimisation > BIOS, ou lance
+scripts\Mode-console.bat et réponds O à « Générer le guide BIOS ».
+
+Les noms de menus varient selon le fabricant et la version du BIOS.
+
+1) Entrer dans le BIOS
+   - Touche au démarrage : généralement Suppr ou F2 (F2/F10/Échap sur les PC de marque).
+   - Ou : Paramètres > Récupération > Démarrage avancé > Paramètres du microprogramme UEFI.
+   - F10 = sauvegarder et quitter (sur la plupart des BIOS).
+
+2) Mettre à jour le BIOS (recommandé)
+   - Télécharge le BIOS sur la page support officielle de ton modèle EXACT.
+   - Utilise l'outil intégré au BIOS (M-Flash, EZ Flash, Q-Flash, Instant Flash...).
+   - Ne coupe jamais le courant pendant la mise à jour.
+
+3) RAM : activer le profil XMP / EXPO / D.O.C.P. (le plus gros gain)
+   - Généralement dans un menu OC / Tweaker / Ai Tweaker > Profil 1.
+   - Vérifie ensuite dans le Gestionnaire des tâches > Performances > Mémoire.
+
+4) Resizable BAR / Smart Access Memory
+   - Above 4G Decoding : Enabled, puis Re-Size BAR Support : Enabled.
+   - Exige le mode UEFI (CSM désactivé). Ne désactive pas le CSM si Windows
+     est installé en mode Legacy/MBR.
+
+5) Sécurité
+   - TPM : AMD fTPM ou Intel PTT activé. Secure Boot activé (mode UEFI).
+
+En cas de problème : « Load Optimized Defaults » ou Clear CMOS (voir le manuel).

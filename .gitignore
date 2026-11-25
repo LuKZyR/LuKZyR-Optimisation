@@ -1,0 +1,13 @@
+# Fichiers compilés (publiés dans les Releases, pas dans le dépôt)
+*.exe
+*.dll
+*.zip
+*.pdb
+# Fichiers de test / temporaires
+scripts/_test.ps1
+_*.ps1
+*.log
+journal-*.txt
+HelixFlux-journal-*.txt
+Thumbs.db
+desktop.ini
