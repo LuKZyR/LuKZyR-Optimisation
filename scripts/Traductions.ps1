@@ -535,3 +535,8 @@ $EN['Score d''optimisation : {0}/100'] = 'Optimization score: {0}/100'
 $EN['Seul ce qui est lu sur ce PC compte. Une mesure pas encore lue n''est pas comptée. VBS n''est pas compté : c''est un compromis sécurité / performance.'] = 'Only what is read on this PC counts. A reading not done yet is not counted. VBS is not counted: it is a security / performance trade-off.'
 $EN['Ce qui prend de la place'] = 'What takes up space'
 $EN['Rechercher (Ctrl+F)'] = 'Search (Ctrl+F)'
+# v5.12 : signaler un bug (Discord)
+$EN['Signaler un bug'] = 'Report a bug'
+$EN['Signaler un bug (Discord)'] = 'Report a bug (Discord)'
+$EN['Un souci ? Explique-le sur le serveur Discord (joins le journal : Journal > Exporter).'] = 'A problem? Describe it on the Discord server (attach the log: Log > Export).'
+$EN['Le navigateur ne s''est pas ouvert. Lien copié, colle-le dans ton navigateur :'] = 'The browser did not open. Link copied, paste it into your browser:'

@@ -1,18 +1,20 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.11)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.12)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.11
-$VersionInterne = "5.11"   # comparé comme [version] : 5.11 > 5.10 > 5.9
+$VersionBeta = $true         # v0.1 bêta = version interne 5.12
+$VersionInterne = "5.12"   # comparé comme [version] : 5.12 > 5.11 > 5.10 > 5.9
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
 $UrlMiseAJourDefaut = "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/main/version.json"
 # 2e source si version.json est absent ou illisible : les releases GitHub du dépôt (pré-versions comprises)
 $UrlReleasesDefaut  = "https://api.github.com/repos/LuKZyR/LuKZyR-Optimisation/releases?per_page=5"
+# v5.12 : serveur Discord pour signaler les bugs (Paramètres > « Signaler un bug (Discord) », messages de plantage)
+$UrlDiscord = "https://discord.gg/2RrjqvC5vv"
 # v5.6 : un plantage au démarrage n'est plus invisible : journal ProgramData\Lukzyr\plantage-demarrage.txt + message
 $script:fichierPlantage = Join-Path $env:ProgramData "Lukzyr\plantage-demarrage.txt"
 function Noter-Plantage($texte) {
@@ -26,12 +28,13 @@ function Plantage-Demarrage($texte, $details) {
   $journal = $texte
   if ($details) { $journal += "`r`n--- Détail de l'erreur ---`r`n" + (($details -split "`r?`n") -join "`r`n") }
   if ($infos) { $journal += "`r`n--- Système ---`r`n" + $infos }
+  $journal += "`r`nSignale le bug sur Discord : $UrlDiscord (joins ce fichier)"
   Noter-Plantage $journal
   try { Fermer-Chargement } catch {}
   if (-not $env:LK_TEST) {
     $court = ""
     if ($details) { $court = [string]$details; if ($court.Length -gt 1200) { $court = $court.Substring(0, 1200) + " [...]" }; $court = "`n`nErreur :`n" + $court }
-    try { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show(("LuKZyR Optimisation n'a pas pu démarrer :`n`n" + $texte + $court + "`n`nDétails complets : " + $script:fichierPlantage), "LuKZyR Optimisation", "OK", "Error") } catch {}
+    try { Add-Type -AssemblyName System.Windows.Forms; [void][Windows.Forms.MessageBox]::Show(("LuKZyR Optimisation n'a pas pu démarrer :`n`n" + $texte + $court + "`n`nDétails complets : " + $script:fichierPlantage + "`n`nSignale le bug sur Discord : " + $UrlDiscord + " (joins ce fichier)"), "LuKZyR Optimisation", "OK", "Error") } catch {}
   }
   exit 3   # 3 = déjà signalé à l'utilisateur (le lanceur n'affiche pas un 2e message)
 }
@@ -48,7 +51,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     catch { [void][Windows.Forms.MessageBox]::Show("LuKZyR Optimisation a besoin des droits administrateur pour modifier les réglages de Windows.`n`nLa demande a été refusée : rien n'a été modifié. Relance l'appli et clique sur « Oui ».", "LuKZyR Optimisation", "OK", "Warning"); exit 1 }
     # on attend la fin de l'appli : si elle s'arrête sur une erreur sans l'avoir signalée (code autre que 0 / 3), on le dit
     try { $pr.WaitForExit(); $codeFin = $pr.ExitCode } catch { $codeFin = 0 }
-    if ($codeFin -ne 0 -and $codeFin -ne 3) { [void][Windows.Forms.MessageBox]::Show("LuKZyR Optimisation s'est arrêté de façon inattendue (code $codeFin).`n`nLance plutôt « LuKZyR Optimisation.exe » : il affiche le détail de l'erreur. Les journaux sont dans C:\ProgramData\Lukzyr.", "LuKZyR Optimisation", "OK", "Error") }
+    if ($codeFin -ne 0 -and $codeFin -ne 3) { [void][Windows.Forms.MessageBox]::Show("LuKZyR Optimisation s'est arrêté de façon inattendue (code $codeFin).`n`nLance plutôt « LuKZyR Optimisation.exe » : il affiche le détail de l'erreur. Les journaux sont dans C:\ProgramData\Lukzyr.`n`nSignale le bug sur Discord : $UrlDiscord", "LuKZyR Optimisation", "OK", "Error") }
     exit $codeFin
 }
 # v5.2 : écran de chargement affiché TOUT DE SUITE (avant la compilation de l'interface et la détection du matériel)
@@ -66,6 +69,7 @@ using System.Runtime.InteropServices; using System.Collections.Concurrent; using
 // C:\ProgramData\Lukzyr\erreurs-interface.txt et l'appli continue (avant : boîte « exception non gérée » de WinForms).
 public static class LkSafe {
   public static string Journal = null; public static int Erreurs = 0, Dessins = 0; public static string Derniere = "";
+  public static string Discord = "https://discord.gg/2RrjqvC5vv";   // v5.12 : serveur Discord pour signaler les bugs
   static readonly object verrou = new object(); static Dictionary<string, int> vus = new Dictionary<string, int>(); static bool installe;
   public static void Noter(string quoi, Exception ex) {
     try {
@@ -74,6 +78,8 @@ public static class LkSafe {
         string cle = quoi + "|" + (ex == null ? "" : ex.GetType().FullName + "|" + ex.Message); int n; vus.TryGetValue(cle, out n); vus[cle] = n + 1;
         if (n >= 3 || Erreurs > 300 || string.IsNullOrEmpty(Journal)) return;   // la même erreur 3 fois maximum (pas d'avalanche à 60 images/s)
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Journal));
+        // v5.12 : en-tête (une fois par fichier) : où signaler le bug
+        if (!System.IO.File.Exists(Journal)) System.IO.File.WriteAllText(Journal, "LuKZyR Optimisation - erreurs de l'interface (l'appli a continué).\r\nSignale le bug sur Discord : " + Discord + " (joins ce fichier)\r\n\r\n", Encoding.UTF8);
         System.IO.File.AppendAllText(Journal, "[" + DateTime.Now.ToString("s") + "] " + quoi + "\r\n" + (ex == null ? "" : ex.ToString()) + "\r\n\r\n", Encoding.UTF8);
       }
     } catch { }
@@ -634,6 +640,7 @@ public static class LkIcons {
     {"refresh", "a 12 12 9 0 315; l 18.36 5.64 21 8; p 21 3 21 8 16 8"},
     {"power", "l 12 2 12 11; a 12 12.5 9 -55 290"},
     {"globe", "c 12 12 10; l 2 12 22 12; e 12 12 4.2 10"},
+    {"bug", "e 12 14.5 5 6.5; l 12 10 12 20.5; a 12 8.6 3.2 180 180; l 9.6 6.4 8 4; l 14.4 6.4 16 4; l 7.2 12.5 3.5 11; l 16.8 12.5 20.5 11; l 7 16.5 3.5 18; l 17 16.5 20.5 18"},
     {"play", "c 12 12 10; P 10 8.2 15.8 12 10 15.8"},
     {"download", "l 12 3 12 15; p 7 10 12 15 17 10; p 3 15 3 19 5 21 19 21 21 19 21 15"},
     {"plug", "l 9 2 9 7; l 15 2 15 7; P 6 7 18 7 18 11 14.5 15.5 9.5 15.5 6 11; l 12 15.5 12 22"},
@@ -2851,6 +2858,22 @@ foreach ($o in $outils) {
 # ===================== PARAMÈTRES =====================
 $pT = NouvellePage "parametres" "Paramètres" "Apparence, langue et mises à jour de LuKZyR Optimisation." -Defile
 $yOpt = 0
+# v5.12 : signaler un bug sur le serveur Discord (navigateur par défaut ; lien copié si le navigateur ne s'ouvre pas)
+function Ouvrir-Discord {
+  try { Start-Process $UrlDiscord -ErrorAction Stop; Log "Discord ouvert pour signaler un bug : $UrlDiscord" }
+  catch {
+    try { [Windows.Forms.Clipboard]::SetText($UrlDiscord) } catch {}
+    [void](Boite ((T "Le navigateur ne s'est pas ouvert. Lien copié, colle-le dans ton navigateur :") + "`n`n$UrlDiscord") "OK" "Warning")
+  }
+}
+$cDiscord = Hex "#5865F2"
+$oBug = LigneOption $pT $yOpt "bug" "Signaler un bug" "Un souci ? Explique-le sur le serveur Discord (joins le journal : Journal > Exporter)." $cDiscord
+$bBug = Bouton $oBug.Carte "Signaler un bug (Discord)" 676 13 228 36 -Couleur $cDiscord
+$bBug.Fill2 = $cAccent2; $bBug.ForeColor = [Drawing.Color]::White; $bBug.Icon = "bug"
+$oBug.Desc.Width = S 600; $tip.SetToolTip($bBug, $UrlDiscord)
+$bBug.Add_Click({ Ouvrir-Discord })
+foreach ($el in $oBug.Elements) { $el.Add_Click({ Ouvrir-Discord }) }
+$yOpt += 70
 # Thème clair
 $oTheme = LigneOption $pT $yOpt 0xE706 "Thème clair" "Interface claire au lieu de sombre (l'accent violet reste)."
 $swTheme = New-Object LkToggle; $swTheme.Size = Sz 44 24; $swTheme.Location = Pt 858 19; $swTheme.Checked = $script:themeClair; $swTheme.OffColor = $cOff

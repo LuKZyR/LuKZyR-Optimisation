@@ -3,11 +3,18 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.11). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.12). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
   versions de travail).
+
+SIGNALER UN BUG
+  Serveur Discord de LuKZyR : https://discord.gg/2RrjqvC5vv
+  (ou Paramètres > « Signaler un bug (Discord) » dans l'appli). Explique ce que tu
+  faisais, et joins le journal : Journal > « Exporter le journal ». Si l'appli ne
+  démarre pas, joins C:\ProgramData\Lukzyr\plantage-demarrage.txt (ou
+  erreurs-interface.txt pour un souci d'affichage).
 
 DÉMARRAGE
   1. Dézippe tout le dossier (ne lance pas depuis le zip).
@@ -97,8 +104,9 @@ L'INTERFACE (barre latérale à gauche)
                 pour TA carte mère (exporter, page support, redémarrer dans le BIOS ;
                 rien n'est jamais modifié dans le BIOS ; texte du guide en français).
   JOURNAL       Ce qui se passe, en direct.
-  PARAMÈTRES    (roue dentée) Thème clair, Langue FR / EN, Animations,
-                Animations réduites, Rendu lissé, Mise à jour de l'appli, À propos.
+  PARAMÈTRES    (roue dentée) Signaler un bug (Discord), Thème clair, Langue FR / EN,
+                Animations, Animations réduites, Rendu lissé, Mise à jour de l'appli,
+                À propos.
 
   Chaque option a un badge :
     SÛR             sans danger, remis par « Tout annuler »
@@ -150,13 +158,13 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.11",
+           "build": "5.12",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
          }
   "version" est le numéro public, "build" le numéro interne : tant que la version
-  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.10 > 5.9 > 5.8).
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.12 > 5.11 > 5.10 > 5.9).
   Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
   téléchargé est vérifié et supprimé s'il ne correspond pas.
   Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
@@ -218,6 +226,13 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉ v0.1 bêta (version interne 5.12)
+  - Paramètres > « Signaler un bug (Discord) » : ouvre le serveur Discord de LuKZyR
+    (https://discord.gg/2RrjqvC5vv) dans le navigateur. Si le navigateur ne s'ouvre
+    pas, le lien est copié pour le coller toi-même.
+  - Le message de plantage au démarrage, plantage-demarrage.txt et
+    erreurs-interface.txt indiquent où signaler le bug (lien Discord).
 
 CORRECTIF v0.1 bêta (version interne 5.11)
   - « Moins de pub et de suivi » : sur Windows 11 récent (24H2 et plus), Windows protège

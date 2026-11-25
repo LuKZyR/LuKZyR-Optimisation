@@ -11,7 +11,8 @@ est expliqué, marqué **SÛR / AVANCÉ / DÉFINITIF**, sauvegardé avant modifi
 annulable en un clic avec **« Tout annuler »**.
 
 > **Statut : v0.1 bêta.** Testée, mais encore sur peu de PC différents. En cas de souci :
-> Journal > « Exporter le journal », puis ouvre une *issue* avec le fichier.
+> Journal > « Exporter le journal », puis signale-le sur le
+> [serveur Discord](https://discord.gg/2RrjqvC5vv) avec le fichier.
 
 ## Aperçu
 
@@ -118,6 +119,16 @@ docs\                     Captures d'écran
 version.json              Dernière version publiée (vérification des mises à jour)
 LISEZ-MOI.txt             Mode d'emploi détaillé (aussi fourni dans le zip)
 ```
+
+## Signaler un bug
+
+Un problème ? Rejoins le **[serveur Discord de LuKZyR](https://discord.gg/2RrjqvC5vv)**
+(aussi accessible depuis l'appli : **Paramètres > « Signaler un bug (Discord) »**).
+
+- Explique ce que tu faisais quand le problème est arrivé.
+- Joins le journal : Journal > « Exporter le journal ».
+- Si l'appli ne démarre pas : joins `C:\ProgramData\Lukzyr\plantage-demarrage.txt`
+  (ou `erreurs-interface.txt` pour un souci d'affichage).
 
 ## Crédits
 
