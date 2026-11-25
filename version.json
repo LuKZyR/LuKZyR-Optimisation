@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.11",
+  "build": "5.12",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.11) : les réglages protégés par Windows 11 (widgets, fil d'actualités) sont signalés « ignoré » au lieu d'une erreur, avec un réglage de repli pour masquer les widgets.",
-  "sha256": "51bf31a3911af8760d6e9e8b4a39eeea3802d88fe149dd8a85cee7d38a48131f"
+  "notes": "v0.1 bêta (build 5.12) : nouveau bouton « Signaler un bug (Discord) » dans Paramètres, et le lien du serveur Discord dans les messages de plantage.",
+  "sha256": "be967b36a34524acd1e72edd37725a8fd20cec469b12dabff94deed0c5e16257"
 }
