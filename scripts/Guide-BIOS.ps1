@@ -1,6 +1,6 @@
 param([switch]$Exporter, [switch]$SansOuvrir)
 # =====================================================================
-#  HELIXFLUX OPTIMISATION v0.1 bêta  -  Guide BIOS personnalisé
+#  LUKZYR OPTIMISATION v0.1 bêta  -  Guide BIOS personnalisé
 #  Détecte la carte mère (et CPU, RAM, GPU, UEFI, Secure Boot, TPM)
 #  puis écrit un guide adapté à CE PC. Ne modifie jamais le BIOS.
 #
@@ -31,7 +31,9 @@ function Lire-MaterielBios {
   $m.Mems     = try { @(Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop) } catch { @() }
   $m.Gpus     = try { @(Get-CimInstance Win32_VideoController -ErrorAction Stop) } catch { @() }
   $m.Systeme  = try { Get-CimInstance Win32_ComputerSystem -ErrorAction Stop | Select-Object -First 1 } catch { $null }
-  $m.Batterie = try { [bool](Get-CimInstance Win32_Battery -ErrorAction Stop) } catch { $false }
+  # v5.6 : un onduleur (UPS) branché en USB apparaît aussi comme « batterie » : il est ignoré
+  $m.Batterie = try { [bool]@(Get-CimInstance Win32_Battery -ErrorAction Stop | Where-Object { "$($_.Name) $($_.DeviceID)" -notmatch 'UPS|APC|Eaton|CyberPower|Back-?UPS|Onduleur|Smart-UPS' }).Count } catch { $false }
+  $m.Chassis  = try { @((Get-CimInstance Win32_SystemEnclosure -ErrorAction Stop | Select-Object -First 1).ChassisTypes) } catch { @() }
   # UEFI ou Legacy : Windows fournit la variable d'environnement firmware_type
   $fw = "$env:firmware_type"
   if (-not $fw) { try { if ((bcdedit /enum "{current}" 2>$null) -match 'winload\.efi') { $fw = "UEFI" } elseif ((bcdedit /enum "{current}" 2>$null) -match 'winload\.exe') { $fw = "Legacy" } } catch {} }
@@ -133,7 +135,9 @@ function Get-ProfilBios($m) {
     else { "" }
   $p.FabricantBrut = if ($fabCM) { $fabCM } else { $fabPC }
   $type = 0; try { $type = [int]$m.Systeme.PCSystemType } catch {}
-  $p.Portable = [bool]$m.Batterie -or $type -eq 2
+  # portable = Windows le dit « mobile », ou une batterie dans un boîtier qui n'est pas un PC fixe (tour, mini-tour, tout-en-un...)
+  $fixe = [bool]@($m.Chassis | Where-Object { $_ -in 3, 4, 5, 6, 7, 13, 15, 16, 24, 35 }).Count
+  $p.Portable = ($type -eq 2) -or ([bool]$m.Batterie -and -not $fixe)
   $p.Oem = $p.Fabricant -in @("Dell","HP","Lenovo","Acer","Dynabook","Microsoft","Samsung","Huawei","Fujitsu","Medion")
   # Profil de guide : carte mère de bureau d'une marque connue, sinon PC de marque / portable, sinon inconnu
   $p.Profil = if ($p.Portable -or $p.Oem) { "OEM" } elseif ($p.Fabricant -in @("MSI","ASUS","Gigabyte","ASRock","Biostar","NZXT")) { $p.Fabricant } else { "Inconnu" }
@@ -351,7 +355,7 @@ function Get-GuideBios($m) {
   function OuiNon($v, $oui = "oui", $non = "non") { if ($null -eq $v) { "inconnu" } elseif ($v) { $oui } else { $non } }
 
   A "GUIDE BIOS PERSONNALISÉ - $($p.Nom)"
-  A "Généré par HelixFlux Optimisation v0.1 bêta le $((Get-Date).ToString('dd/MM/yyyy'))."
+  A "Généré par LuKZyR Optimisation v0.1 bêta le $((Get-Date).ToString('dd/MM/yyyy'))."
   A "Ce guide n'applique rien : c'est toi qui choisis dans le BIOS. Les noms de menus"
   A "peuvent varier un peu selon la version du BIOS."
   A ""
@@ -376,7 +380,7 @@ function Get-GuideBios($m) {
 
   A "=== 1. ENTRER DANS LE BIOS ==="
   A "  - Touche : $($f.Touche)."
-  if ($p.Uefi -eq $true) { A "  - Plus simple : bouton « Redémarrer dans le BIOS » de HelixFlux Optimisation (ou Paramètres > Récupération > Démarrage avancé > Paramètres du microprogramme UEFI)." }
+  if ($p.Uefi -eq $true) { A "  - Plus simple : bouton « Redémarrer dans le BIOS » de LuKZyR Optimisation (ou Paramètres > Récupération > Démarrage avancé > Paramètres du microprogramme UEFI)." }
   A "  - Interface : $($f.Interface)$(if ($p.Uefi -eq $false -and $p.Profil -eq 'Inconnu') { ' (ou BIOS classique)' })."
   A "  - Mode avancé : $($f.Avance)."
   A "  - Pour sauvegarder et quitter : F10 puis « Yes / Oui » (sur la plupart des BIOS)."
@@ -399,7 +403,7 @@ function Get-GuideBios($m) {
   $modExact = if ($p.Profil -eq "OEM" -and $p.ModelePC) { $p.ModelePC } else { $p.Modele }
   A "  - Vérifie que le modèle EXACT correspond$(if ($modExact) { " ($modExact)" }) : un BIOS d'un autre modèle peut rendre la carte inutilisable."
   A "  - Outil de mise à jour : $($f.Flash)."
-  A "  - Ne coupe jamais le courant pendant la mise à jour. HelixFlux Optimisation ne flashe jamais le BIOS tout seul."
+  A "  - Ne coupe jamais le courant pendant la mise à jour. LuKZyR Optimisation ne flashe jamais le BIOS tout seul."
   A "  - Après une mise à jour, les réglages reviennent par défaut : refais les étapes suivantes."
   A ""
 
@@ -446,7 +450,9 @@ function Get-GuideBios($m) {
       if ($p.Chipset -eq "A620" -or $p.Chipset -eq "A320") { A "  - Le chipset $($p.Chipset) ne permet généralement pas l'overclocking du processeur : passe cette étape." }
       else {
         A "  - PBO + Curve Optimizer : $($f.Pbo)."
-        A "    Precision Boost Overdrive : Advanced ; Curve Optimizer : All Cores > Negative > 10 à 15."
+        A "    Precision Boost Overdrive : Advanced ; Curve Optimizer : All Cores > Negative > commence à 5, monte par paliers de 5 (15 max)."
+        A "/!\ Une valeur trop forte peut rendre le PC instable (écrans bleus, redémarrages, erreurs en jeu), même si tout semble aller au début."
+        A "    Si le moindre souci apparaît : remets Curve Optimizer sur Disabled (ou « Load Optimized Defaults »). Rien n'est obligatoire."
         if ($p.X3D) { A "/!\ Processeur X3D : options limitées (Curve Optimizer seulement selon le BIOS). Ne monte jamais la tension." }
         A "  - Teste la stabilité (OCCT ou Cinebench 30 min + tes jeux). Plantage = réduis la valeur ou désactive."
       }
