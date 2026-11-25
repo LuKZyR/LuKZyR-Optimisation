@@ -1,5 +1,5 @@
 param([string]$Elements = "", [switch]$Sauvegarder, [switch]$Restaurer, [switch]$NonInteractif)
-# HelixFlux Optimisation v4 - « Tout annuler »
+# LuKZyR Optimisation - « Tout annuler »
 # Sauvegarde la valeur D'ORIGINE de chaque réglage que l'appli modifie, dans
 # C:\ProgramData\Lukzyr\sauvegarde-reglages.json (la 1re valeur vue est gardée : un 2e passage
 # ne l'écrase jamais), puis restaure tout à l'identique (valeurs absentes supprimées).
@@ -116,7 +116,12 @@ function Retenir-Registre([string[]]$ids, $d = $null) {
 function Lire-Special($nom) {
   switch ($nom) {
     "alimentation" { if ("$(powercfg /getactivescheme)" -match '([0-9a-f]{8}-[0-9a-f\-]{27})') { return $matches[1] } }
-    "hibernation"  { $h = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name HibernateEnabled).HibernateEnabled; return [int]([bool]$h) }
+    "hibernation"  {
+      # v5.6 : valeur absente = on regarde si le fichier d'hibernation existe (sinon l'annulation pourrait la couper à tort)
+      $pw = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Power"
+      if ($pw -and @($pw.PSObject.Properties.Name) -contains "HibernateEnabled") { return [int]([bool]$pw.HibernateEnabled) }
+      return [int](Test-Path -LiteralPath "$env:SystemDrive\hiberfil.sys")
+    }
     "trim"         { if ("$(fsutil behavior query DisableDeleteNotify)" -match 'NTFS DisableDeleteNotify\s*=\s*(\d)') { return [int]$matches[1] } }
   }
   return $null
@@ -143,6 +148,16 @@ function Retenir-Dns($cartes) {
     $d.Dns[$g] = [ordered]@{ Nom = "$($a.Name)"; IPv4 = "$v4"; IPv6 = "$v6" }
   }
   Ecrire-Sauvegarde $d
+}
+
+# v5.6 : DNS d'UNE famille (ipv4 / ipv6) d'une carte : liste vide = automatique (DHCP / FAI). L'autre famille n'est pas touchée.
+function Regler-DnsFamille($index, $famille, [string[]]$serveurs) {
+  $serveurs = @($serveurs | Where-Object { $_ })
+  if (-not $serveurs.Count) { netsh interface $famille set dnsservers name=$index source=dhcp 2>&1 | Out-Null; return ($LASTEXITCODE -eq 0) }
+  netsh interface $famille set dnsservers name=$index source=static address=$($serveurs[0]) register=primary validate=no 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { return $false }
+  for ($i = 1; $i -lt $serveurs.Count; $i++) { netsh interface $famille add dnsservers name=$index address=$($serveurs[$i]) index=$($i + 1) validate=no 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { return $false } }
+  return $true
 }
 
 # Résumé lisible de ce qui sera restauré (pour la confirmation)
@@ -174,20 +189,34 @@ function Restaurer-Tout {
   foreach ($k in $d.Speciaux.Keys) {
     $v = $d.Speciaux[$k]
     switch ($k) {
-      "alimentation" { powercfg -setactive $v 2>&1 | Out-Null; if ($LASTEXITCODE -eq 0) { $ok++ } else { $ko++ } }
-      "hibernation"  { if ([int]$v) { powercfg -h on 2>&1 | Out-Null } else { powercfg -h off 2>&1 | Out-Null }; $ok++ }
-      "trim"         { fsutil behavior set DisableDeleteNotify ([int]$v) | Out-Null; $ok++ }
+      "alimentation" {
+        powercfg -setactive $v 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) { $ok++ } else { $ko++; Write-Host " - Échec : plan d'alimentation $v introuvable." -ForegroundColor Red }
+        # v5.6 : supprime le plan « Performances élevées » que l'appli avait dû recréer (repéré par son GUID, jamais par son nom)
+        $fc = Join-Path (Split-Path $script:FichierSauvegarde) "plan-cree.txt"
+        if (Test-Path $fc) {
+          $g = "$(Get-Content $fc -Raw)".Trim()
+          if ($g -match '^[0-9a-fA-F\-]{36}$' -and $g -ne "$v" -and "$(powercfg /getactivescheme)" -notmatch [regex]::Escape($g)) { powercfg -delete $g 2>&1 | Out-Null }
+          Remove-Item $fc -Force
+        }
+      }
+      "hibernation"  {
+        if ([int]$v) { powercfg -h on 2>&1 | Out-Null } else { powercfg -h off 2>&1 | Out-Null }
+        if ($LASTEXITCODE -eq 0) { $ok++ } else { $ko++; Write-Host " - Échec : hibernation non remise (powercfg code $LASTEXITCODE)." -ForegroundColor Red }
+      }
+      "trim"         {
+        fsutil behavior set DisableDeleteNotify ([int]$v) | Out-Null
+        if ($LASTEXITCODE -eq 0) { $ok++ } else { $ko++; Write-Host " - Échec : TRIM non remis (fsutil code $LASTEXITCODE)." -ForegroundColor Red }
+      }
     }
   }
   foreach ($g in $d.Dns.Keys) {
     $e = $d.Dns[$g]; $a = Get-NetAdapter | Where-Object { "$($_.InterfaceGuid)" -eq $g }
     if (-not $a) { $ko++; continue }
-    $srv = @("$($e.IPv4) $($e.IPv6)" -split '[,\s]+' | Where-Object { $_ })
-    try {
-      if ($srv.Count) { Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $srv -ErrorAction Stop }
-      else { Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ResetServerAddresses -ErrorAction Stop }
-      $ok++
-    } catch { $ko++ }
+    # v5.6 : IPv4 et IPv6 remis SÉPARÉMENT (une famille vide = automatique pour cette famille seulement)
+    $r4 = Regler-DnsFamille $a.ifIndex "ipv4" @("$($e.IPv4)" -split '[,\s]+' | Where-Object { $_ })
+    $r6 = Regler-DnsFamille $a.ifIndex "ipv6" @("$($e.IPv6)" -split '[,\s]+' | Where-Object { $_ })
+    if ($r4 -and $r6) { $ok++ } else { $ko++; Write-Host " - Échec DNS sur « $($e.Nom) » (IPv4 : $(if ($r4) { 'OK' } else { 'échec' }), IPv6 : $(if ($r6) { 'OK' } else { 'échec' }))." -ForegroundColor Red }
   }
   if ($d.Dns.Count) { Clear-DnsClientCache }
   if (-not $ko) { Remove-Item $script:FichierSauvegarde -Force }
@@ -200,11 +229,12 @@ if ($MyInvocation.InvocationName -ne '.') {
   if ($Sauvegarder) {
     Write-Host "==> Sauvegarde des réglages d'origine (pour « Tout annuler »)"
     $n = Sauvegarder-Elements @($Elements -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if (-not (Test-Path $script:FichierSauvegarde)) { Write-Host " - ÉCHEC : impossible d'écrire $script:FichierSauvegarde." -ForegroundColor Red; exit 1 }
     Write-Host " - $n nouvelle(s) valeur(s) d'origine retenue(s) dans $script:FichierSauvegarde (les originaux déjà retenus ne sont jamais écrasés)."
   }
   if ($Restaurer) {
     Write-Host "==> Restauration des réglages d'origine"
     if (Sauvegarde-Vide) { Write-Host " - Rien à restaurer (aucune sauvegarde)." }
-    else { $r = Restaurer-Tout; Write-Host " - $($r.Ok) réglage(s) restauré(s), $($r.Ko) échec(s). Redémarre le PC pour tout appliquer." }
+    else { $r = Restaurer-Tout; Write-Host " - $($r.Ok) réglage(s) restauré(s), $($r.Ko) échec(s). Redémarre le PC pour tout appliquer."; if ($r.Ko) { exit 1 } }
   }
 }

@@ -4,11 +4,21 @@ param([switch]$NonInteractif, [switch]$SansPointRestauration, [switch]$Debloat, 
 # Depuis l'interface : -NonInteractif + -Debloat / -Telemetrie / -Copilot / -OneDrive (/ -Edge), aucune question.
 $ErrorActionPreference = "SilentlyContinue"
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    exit
+    # v5.6 : relance en administrateur AVEC les mêmes paramètres, attend la fin et renvoie son code ; UAC refusé = code 1
+    $relance = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+    foreach ($p in $PSBoundParameters.GetEnumerator()) {
+      if ($p.Value -is [switch]) { if ($p.Value.IsPresent) { $relance += "-$($p.Key)" } }
+      else { $relance += "-$($p.Key)"; $relance += "`"$(@($p.Value) -join ',')`"" }
+    }
+    try { $pr = Start-Process powershell -ArgumentList ($relance -join ' ') -Verb RunAs -Wait -PassThru -ErrorAction Stop; exit $pr.ExitCode }
+    catch { Write-Host "Droits administrateur refusés : rien n'a été modifié." -ForegroundColor Red; exit 1 }
 }
 if ($NonInteractif) { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false }
 function Etape($t) { Write-Host "`n==> $t" -ForegroundColor Cyan }
+# v5.6 : chaque échec est compté ; code de sortie 1 s'il y en a eu au moins un
+$script:echecs = 0
+function Echec($t) { Write-Host " - ÉCHEC : $t" -ForegroundColor Red; $script:echecs++ }
+function reg { & reg.exe @args; if ($LASTEXITCODE -ne 0) { Echec "registre ($($args[1]) $($args[3]))" } }
 if (-not $NonInteractif) {
   $Debloat = $true; $Telemetrie = $true
   $Copilot  = (Read-Host "Supprimer aussi Copilot ? (o/n)") -eq "o"
@@ -17,15 +27,16 @@ if (-not $NonInteractif) {
 }
 
 if (-not $SansPointRestauration) {
-  Etape "Point de restauration"
-  Enable-ComputerRestore -Drive "$env:SystemDrive\"
-  reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" /v SystemRestorePointCreationFrequency /t REG_DWORD /d 0 /f | Out-Null
-  Checkpoint-Computer -Description "Avant debloat" -RestorePointType MODIFY_SETTINGS
-  Write-Host "Point de restauration créé." -ForegroundColor Green
+  # v5.6 : même script que l'interface (fréquence sauvegardée puis remise, résultat vérifié)
+  & (Join-Path $PSScriptRoot "Point-Restauration.ps1") -NonInteractif -Description "Avant debloat"
+  if ($LASTEXITCODE -ne 0) {
+    if ($NonInteractif) { Write-Host "Arrêt : pas de point de restauration, rien n'a été modifié." -ForegroundColor Red; exit 1 }
+    if ((Read-Host "Continuer SANS point de restauration ? (o/n)") -ne "o") { Write-Host "Arrêt : rien n'a été modifié."; exit 1 }
+  }
 }
 
 if ($Debloat) {
-Etape "Suppression des applis inutiles (réinstallables depuis le Microsoft Store)"
+Etape "Suppression des applis inutiles (tous les comptes du PC ; réinstallables depuis le Microsoft Store)"
 $applis = @(
   # Microsoft
   "Microsoft.BingNews","Microsoft.BingWeather","Microsoft.BingSearch","Microsoft.BingFinance","Microsoft.BingSports",
@@ -44,13 +55,25 @@ $applis = @(
   "*CandyCrush*","*BubbleWitch*","*FarmVille*","*HiddenCity*","*MarchofEmpires*","*RoyalRevolt*","*Asphalt*","*Sling*",
   "*McAfee*","*Norton*","*ExpressVPN*","*Booking*","*Xing*"
 )
+# v5.6 : listes lues UNE fois ; résultat vérifié pour chaque paquet ; retrait pour tous les comptes (-AllUsers)
+# et de l'image Windows (paquets « provisionnés » : ne reviennent pas pour les nouveaux comptes)
+$installes = @(Get-AppxPackage -AllUsers | Where-Object { -not $_.NonRemovable -and -not $_.IsFramework })
+$provisionnes = @(Get-AppxProvisionedPackage -Online)
 $nb = 0
 foreach ($a in $applis) {
-  $p = Get-AppxPackage -AllUsers -Name $a
-  if ($p) { $p | Remove-AppxPackage -AllUsers; Write-Host " - Supprimé : $($p[0].Name)" -ForegroundColor Green; $nb++ }
-  Get-AppxProvisionedPackage -Online | Where-Object DisplayName -like $a | Remove-AppxProvisionedPackage -Online | Out-Null
+  foreach ($p in @($installes | Where-Object { $_.Name -like $a })) {
+    try { Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction Stop; Write-Host " - Supprimé (tous les comptes) : $($p.Name)" -ForegroundColor Green; $nb++ }
+    catch {
+      try { Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop; Write-Host " - Supprimé (compte actuel seulement) : $($p.Name)" -ForegroundColor Yellow; $nb++ }
+      catch { Echec "$($p.Name) n'a pas pu être supprimé ($($_.Exception.Message))" }
+    }
+  }
+  foreach ($pp in @($provisionnes | Where-Object { $_.DisplayName -like $a })) {
+    try { [void](Remove-AppxProvisionedPackage -Online -PackageName $pp.PackageName -ErrorAction Stop); Write-Host " - Retiré de l'image Windows : $($pp.DisplayName)" -ForegroundColor Green }
+    catch { Echec "$($pp.DisplayName) n'a pas pu être retiré de l'image Windows ($($_.Exception.Message))" }
+  }
 }
-if (-not $nb) { Write-Host " - Aucune appli inutile trouvée (déjà propre)." }
+if (-not $nb) { Write-Host " - Aucune appli inutile installée (déjà propre)." }
 
 Etape "Moins de pub et de suivi"
 # Pubs et suggestions dans le menu Démarrer / écran de verrouillage
@@ -81,8 +104,9 @@ if ($Telemetrie) {
   # Données de diagnostic au minimum + service « Expériences des utilisateurs connectés et télémétrie » arrêté
   reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 1 /f | Out-Null
   reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v TailoredExperiencesWithDiagnosticDataEnabled /t REG_DWORD /d 0 /f | Out-Null
-  Stop-Service DiagTrack -Force; Set-Service DiagTrack -StartupType Disabled
-  Write-Host " - Télémétrie réduite au minimum (service DiagTrack désactivé)." -ForegroundColor Green
+  Stop-Service DiagTrack -Force
+  try { Set-Service DiagTrack -StartupType Disabled -ErrorAction Stop; Write-Host " - Télémétrie réduite au minimum (service DiagTrack désactivé)." -ForegroundColor Green }
+  catch { if (Get-Service DiagTrack) { Echec "service DiagTrack non désactivé ($($_.Exception.Message))" } else { Write-Host " - Service DiagTrack absent sur ce PC." } }
 }
 
 if ($Copilot) {
@@ -92,7 +116,7 @@ if ($Copilot) {
   if ($p.Count) {
     foreach ($x in $p) {
       try { Remove-AppxPackage -Package $x.PackageFullName -AllUsers -ErrorAction Stop; Write-Host " - Appli supprimée : $($x.Name)" -ForegroundColor Green }
-      catch { try { Remove-AppxPackage -Package $x.PackageFullName -ErrorAction Stop; Write-Host " - Appli supprimée (utilisateur actuel) : $($x.Name)" -ForegroundColor Green } catch { Write-Host " - $($x.Name) : suppression impossible ($($_.Exception.Message))" -ForegroundColor Yellow } }
+      catch { try { Remove-AppxPackage -Package $x.PackageFullName -ErrorAction Stop; Write-Host " - Appli supprimée (utilisateur actuel) : $($x.Name)" -ForegroundColor Green } catch { Echec "$($x.Name) : suppression impossible ($($_.Exception.Message))" } }
     }
   } else { Write-Host " - Appli Copilot absente." }
   # ne revient pas pour les nouveaux comptes
@@ -106,8 +130,10 @@ if ($OneDrive) {
   Etape "OneDrive"
   taskkill /f /im OneDrive.exe 2>&1 | Out-Null
   $fait = $false
-  if (Get-Command winget) {
-    winget uninstall --id Microsoft.OneDrive --source winget --silent --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
+  $wg = Get-Command winget.exe -CommandType Application | Select-Object -First 1 -ExpandProperty Source
+  if (-not $wg -and (Test-Path "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe")) { $wg = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe" }
+  if ($wg) {
+    & $wg uninstall --id Microsoft.OneDrive --source winget --silent --accept-source-agreements --disable-interactivity 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) { $fait = $true }
   }
   if (-not $fait) {
@@ -118,14 +144,20 @@ if ($OneDrive) {
   $reste = (Test-Path "$env:LOCALAPPDATA\Microsoft\OneDrive\OneDrive.exe") -or (Test-Path "$env:ProgramFiles\Microsoft OneDrive\OneDrive.exe")
   if ($fait -and -not $reste) { Write-Host " - OneDrive désinstallé (tes fichiers restent dans ton dossier utilisateur)." -ForegroundColor Green }
   elseif (-not $fait) { Write-Host " - OneDrive n'est pas installé." }
-  else { Write-Host " - OneDrive est encore présent : désinstalle-le depuis Paramètres > Applications." -ForegroundColor Yellow }
+  else { Echec "OneDrive est encore présent : désinstalle-le depuis Paramètres > Applications." }
 }
 
-if ($Edge -and -not $SansEdge) { & (Join-Path (Split-Path -Parent $PSCommandPath) "Desinstaller-Edge.ps1") -NonInteractif:$NonInteractif }
+if ($Edge -and -not $SansEdge) {
+  # (le script refuse lui-même s'il n'y a aucun autre navigateur)
+  & (Join-Path (Split-Path -Parent $PSCommandPath) "Desinstaller-Edge.ps1") -NonInteractif:$NonInteractif
+  if ($LASTEXITCODE -ne 0) { $script:echecs++ }
+}
 
-Write-Host "`nNettoyage terminé." -ForegroundColor Green
+if ($script:echecs) { Write-Host "`nNettoyage terminé avec $($script:echecs) échec(s) (détails ci-dessus)." -ForegroundColor Red }
+else { Write-Host "`nNettoyage terminé." -ForegroundColor Green }
 Write-Host "Rien de critique n'a été touché : Store, Xbox, Defender, Windows Update, pilotes et Photos sont intacts."
 if (-not $NonInteractif) {
   Write-Host "Pour annuler : tape 'rstrui' dans Démarrer et choisis 'Avant debloat'."
   Read-Host "Appuie sur Entrée pour fermer"
 }
+if ($script:echecs) { exit 1 } else { exit 0 }

@@ -12,12 +12,32 @@ param(
 $ErrorActionPreference = "SilentlyContinue"
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "Relance en administrateur..." -ForegroundColor Yellow
-    Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    exit
+    # v5.6 : relance en administrateur AVEC les mêmes paramètres, attend la fin et renvoie son code ; UAC refusé = code 1
+    $relance = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"")
+    foreach ($p in $PSBoundParameters.GetEnumerator()) {
+      if ($p.Value -is [switch]) { if ($p.Value.IsPresent) { $relance += "-$($p.Key)" } }
+      else { $relance += "-$($p.Key)"; $relance += "`"$(@($p.Value) -join ',')`"" }
+    }
+    try { $pr = Start-Process powershell -ArgumentList ($relance -join ' ') -Verb RunAs -Wait -PassThru -ErrorAction Stop; exit $pr.ExitCode }
+    catch { Write-Host "Droits administrateur refusés : rien n'a été modifié." -ForegroundColor Red; exit 1 }
 }
 if ($NonInteractif) { [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false }
 function Etape($t) { Write-Host "`n==> $t" -ForegroundColor Cyan }
 function Ok($t) { Write-Host " - $t" -ForegroundColor Green }
+# v5.6 : chaque échec réel est compté ; code de sortie 1 s'il y en a eu au moins un
+$script:echecs = 0
+function Echec($t) { Write-Host " - ÉCHEC : $t" -ForegroundColor Red; $script:echecs++ }
+function reg { & reg.exe @args; if ($LASTEXITCODE -ne 0) { Echec "registre ($($args[1]) $($args[3]))" } }
+# PC portable = Windows le dit « mobile », ou une vraie batterie (pas un onduleur) dans un boîtier qui n'est pas un PC fixe
+function Est-Portable {
+  $type = 0; try { $type = [int](Get-CimInstance Win32_ComputerSystem).PCSystemType } catch {}
+  if ($type -eq 2) { return $true }
+  $bat = @(Get-CimInstance Win32_Battery | Where-Object { "$($_.Name) $($_.DeviceID)" -notmatch 'UPS|APC|Eaton|CyberPower|Back-?UPS|Onduleur|Smart-UPS' })
+  if (-not $bat.Count) { return $false }
+  $ch = @((Get-CimInstance Win32_SystemEnclosure).ChassisTypes)
+  if (@($ch | Where-Object { $_ -in 3, 4, 5, 6, 7, 13, 15, 16, 24, 35 }).Count) { return $false }
+  return $true
+}
 
 $reglages = "Alimentation","ModeJeu","PlanifGPU","PrioriteJeux","Souris","VBS","TRIM","NettoyageTemp","Hibernation","AssistantStockage","Transparence","OptimDistribution","Reparation",
   "JeuxFenetres","VRR","EdgeArrierePlan","DelaiDemarrage","AppsArrierePlan","WinSxS","PlanEquilibre"
@@ -27,21 +47,23 @@ $tout = -not ($reglages | Where-Object { $PSBoundParameters.ContainsKey($_) })
 if ($tout -and -not $NonInteractif) {
   # Mode console : tout sauf VBS et réparation, qui sont demandés
   foreach ($n in $reglages) { if ($optionnels -notcontains $n) { Set-Variable $n $true } }
-  $VBS = (Read-Host "Désactiver VBS / intégrité de la mémoire ? (+FPS, un peu moins de sécurité) (o/n)") -eq "o"
+  $VBS = (Read-Host "Désactiver VBS / intégrité de la mémoire ? (gain variable selon le PC, un peu moins de sécurité) (o/n)") -eq "o"
   $Reparation = (Read-Host "Vérifier et réparer les fichiers système (DISM + SFC, ~15 min) ? (o/n)") -eq "o"
 }
 
 if (-not $SansPointRestauration) {
   Etape "Point de restauration (pour pouvoir tout annuler)"
-  Enable-ComputerRestore -Drive "$env:SystemDrive\"
-  reg add "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" /v SystemRestorePointCreationFrequency /t REG_DWORD /d 0 /f | Out-Null
-  Checkpoint-Computer -Description "Avant optimisation PC" -RestorePointType MODIFY_SETTINGS
-  Ok "Point de restauration créé."
+  # v5.6 : même script que l'interface (fréquence sauvegardée puis remise, résultat vérifié)
+  & (Join-Path $PSScriptRoot "Point-Restauration.ps1") -NonInteractif -Description "Avant optimisation PC"
+  if ($LASTEXITCODE -ne 0) {
+    if ($NonInteractif) { Write-Host "Arrêt : pas de point de restauration, rien n'a été modifié." -ForegroundColor Red; exit 1 }
+    if ((Read-Host "Continuer SANS point de restauration ? (o/n)") -ne "o") { Write-Host "Arrêt : rien n'a été modifié."; exit 1 }
+  }
 }
 
 if ($Alimentation) {
   Etape "Plan d'alimentation"
-  if (Get-CimInstance Win32_Battery) {
+  if (Est-Portable) {
     Write-Host " - PC portable détecté : plan d'alimentation laissé tel quel pour préserver la batterie." -ForegroundColor Yellow
   } else {
     # v5.5 : plan « Performances élevées » (gain faible, 0 à 2 % ; un peu plus de chaleur au repos).
@@ -49,14 +71,20 @@ if ($Alimentation) {
     $hp = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
     powercfg -setactive $hp 2>&1 | Out-Null
     if ("$(powercfg /getactivescheme)" -notmatch $hp) {
-      # Plan masqué sur certains Windows 11 : on le recrée une seule fois (pas de doublon s'il existe déjà)
-      $existant = powercfg /list | Select-String "Performances élevées|High performance"
-      $guid = $null
-      if ($existant -and ("$existant" -match '([0-9a-f]{8}-[0-9a-f\-]{27})')) { $guid = $matches[1] }
-      if (-not $guid) { $out = powercfg -duplicatescheme $hp; if ("$out" -match '([0-9a-f]{8}-[0-9a-f\-]{27})') { $guid = $matches[1] } }
-      if ($guid) { powercfg -setactive $guid | Out-Null }
+      # Plan masqué sur certains Windows 11 : on le recrée UNE fois. v5.6 : repéré par son GUID (noté dans
+      # ProgramData\Lukzyr\plan-cree.txt), jamais par son nom (traduit selon la langue de Windows) ;
+      # « Tout annuler » le supprime.
+      $fc = Join-Path $env:ProgramData "Lukzyr\plan-cree.txt"
+      $guid = if (Test-Path $fc) { "$(Get-Content $fc -Raw)".Trim() } else { "" }
+      if ($guid -and "$(powercfg /list)" -notmatch [regex]::Escape($guid)) { $guid = "" }
+      if (-not $guid) {
+        $out = powercfg -duplicatescheme $hp
+        if ("$out" -match '([0-9a-f]{8}-[0-9a-f\-]{27})') { $guid = $matches[1]; [void](New-Item -ItemType Directory -Force (Split-Path $fc)); Set-Content -Path $fc -Value $guid -Encoding ASCII }
+      }
+      if ($guid) { powercfg -setactive $guid 2>&1 | Out-Null }
     }
-    Ok "Plan « Performances élevées » activé (gain faible : 0 à 2 %)."
+    if ("$(powercfg /getactivescheme)" -match '([0-9a-f]{8}-[0-9a-f\-]{27})' -and ($matches[1] -eq $hp -or $matches[1] -eq $guid)) { Ok "Plan « Performances élevées » activé (gain faible : 0 à 2 %)." }
+    else { Echec "le plan « Performances élevées » n'a pas pu être activé." }
   }
 }
 
@@ -65,8 +93,9 @@ if ($PlanEquilibre) {
   if ($Alimentation) { Write-Host " - Ignoré : le plan « Performances élevées » est déjà choisi." -ForegroundColor Yellow }
   else {
     # Recommandé par AMD pour les Ryzen de bureau : la fréquence monte aussi vite, moins de chaleur au repos
-    powercfg -setactive 381b4222-f694-41f0-9685-ff5bb260df2e
-    Ok "Plan « Utilisation normale » activé (mêmes performances en jeu sur Ryzen, moins de chaleur au repos)."
+    powercfg -setactive 381b4222-f694-41f0-9685-ff5bb260df2e 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { Ok "Plan « Utilisation normale » activé (mêmes performances en jeu sur Ryzen, moins de chaleur au repos)." }
+    else { Echec "plan « Utilisation normale » non activé (powercfg code $LASTEXITCODE)." }
   }
 }
 
@@ -108,34 +137,58 @@ if ($VBS) {
   Etape "Intégrité de la mémoire / VBS"
   reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" /v Enabled /t REG_DWORD /d 0 /f | Out-Null
   reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v EnableVirtualizationBasedSecurity /t REG_DWORD /d 0 /f | Out-Null
-  Ok "VBS / intégrité de la mémoire désactivés (effectif après redémarrage)."
+  # v5.6 : texte honnête ; on ne touche PAS à l'hyperviseur (bcdedit) : VBS peut rester actif si l'intégrité
+  # de la mémoire est gérée par Sécurité Windows, ou si Hyper-V / WSL2 / Sandbox l'utilisent.
+  Ok "Demande de désactivation de VBS / intégrité de la mémoire enregistrée (effectif après redémarrage)."
+  Write-Host "   VBS peut rester actif si Hyper-V, WSL2 ou le Bac à sable Windows sont utilisés, ou si Sécurité Windows le réactive." -ForegroundColor Yellow
+  Write-Host "   Vérifie après redémarrage : Sécurité Windows > Sécurité de l'appareil > Isolation du noyau. Le gain dépend du PC (souvent faible)."
 }
 
 if ($TRIM) {
   Etape "TRIM des SSD"
   fsutil behavior set DisableDeleteNotify 0 | Out-Null
+  if ($LASTEXITCODE -eq 0) { Ok "TRIM activé dans Windows." } else { Echec "TRIM non activé (fsutil code $LASTEXITCODE)." }
+  # v5.6 : beaucoup de SSD NVMe ont MediaType = « Unspecified » : on tente le TRIM sur tout volume qui n'est pas un disque dur
+  # connu ; Windows refuse simplement les disques qui ne le gèrent pas.
   $ssd = 0
-  Get-Volume | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' } | ForEach-Object {
+  Get-Volume | Where-Object { $_.DriveLetter -and $_.DriveType -eq 'Fixed' -and $_.FileSystem -match 'NTFS|ReFS' } | ForEach-Object {
+    $lettre = $_.DriveLetter
     $disk = $_ | Get-Partition | Get-Disk | Get-PhysicalDisk
-    if ($disk.MediaType -eq 'SSD') { Optimize-Volume -DriveLetter $_.DriveLetter -ReTrim; Ok "TRIM lancé sur $($_.DriveLetter):"; $ssd++ }
+    if ("$($disk.MediaType)" -eq 'HDD') { return }
+    try { Optimize-Volume -DriveLetter $lettre -ReTrim -ErrorAction Stop; Ok "TRIM lancé sur $($lettre): ($(if ("$($disk.MediaType)" -eq 'SSD') { 'SSD' } else { "type « $($disk.MediaType) », $($disk.BusType)" }))"; $ssd++ }
+    catch { Write-Host " - $($lettre): TRIM non pris en charge par ce disque ($($_.Exception.Message.Trim()))." }
   }
-  if (-not $ssd) { Write-Host " - Aucun SSD détecté : TRIM activé dans Windows, rien à lancer." }
+  if (-not $ssd) { Write-Host " - Aucun SSD compatible TRIM trouvé : rien à lancer." }
 }
 
 if ($NettoyageTemp) {
   Etape "Nettoyage des fichiers temporaires"
-  $avant = (Get-PSDrive C).Free
-  Remove-Item "$env:TEMP\*" -Recurse -Force
-  Remove-Item "$env:SystemRoot\Temp\*" -Recurse -Force
-  $gain = [math]::Round(((Get-PSDrive C).Free - $avant) / 1MB)
+  # v5.6 : jamais de suivi des liens (jonction / lien symbolique dans Temp = on supprime le lien, pas sa cible),
+  # et gain mesuré sur les lecteurs réellement concernés (pas toujours C:)
+  $dossiers = @($env:TEMP, "$env:SystemRoot\Temp") | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+  $lecteurs = @($dossiers | ForEach-Object { ([IO.Path]::GetPathRoot((Resolve-Path -LiteralPath $_).ProviderPath)).Substring(0, 1) } | Select-Object -Unique)
+  $avant = @{}; foreach ($l in $lecteurs) { $avant[$l] = (Get-PSDrive $l).Free }
+  function Vider-Dossier($d) {
+    foreach ($e in @(Get-ChildItem -LiteralPath $d -Force)) {
+      if ($e.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        # lien : on enlève le lien lui-même (le dossier pointé n'est pas touché)
+        if ($e.PSIsContainer) { try { [IO.Directory]::Delete($e.FullName, $false) } catch {} } else { try { [IO.File]::Delete($e.FullName) } catch {} }
+      } elseif ($e.PSIsContainer) { Vider-Dossier $e.FullName; try { [IO.Directory]::Delete($e.FullName, $false) } catch {} }
+      else { try { [IO.File]::Delete($e.FullName) } catch {} }
+    }
+  }
+  foreach ($d in $dossiers) { Vider-Dossier $d }
+  $gain = 0; foreach ($l in $lecteurs) { $gain += ((Get-PSDrive $l).Free - $avant[$l]) }
+  $gain = [math]::Max(0, [math]::Round($gain / 1MB))
   Ok "Fichiers temporaires supprimés ($gain Mo libérés ; les fichiers en cours d'utilisation sont ignorés)."
 }
 
 if ($Hibernation) {
   Etape "Hibernation"
   $avait = Test-Path "$env:SystemDrive\hiberfil.sys"
-  powercfg -h off
-  if ($avait) { Ok "Hibernation et démarrage rapide désactivés (fichier hiberfil.sys supprimé)." }
+  powercfg -h off 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { Echec "hibernation non désactivée (powercfg code $LASTEXITCODE)." }
+  elseif ($avait) { Ok "Hibernation et démarrage rapide désactivés (fichier hiberfil.sys supprimé)." }
   else { Ok "Hibernation et démarrage rapide désactivés (déjà inactifs, rien à supprimer)." }
 }
 
@@ -224,25 +277,35 @@ if ($WinSxS) {
   Etape "Nettoyage des composants Windows (WinSxS, peut prendre 10 min)"
   # Jamais /ResetBase : les mises à jour installées restent désinstallables
   DISM /Online /Cleanup-Image /StartComponentCleanup 2>&1 | ForEach-Object { "$_" -replace "`0","" } | Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*\[[=\s\d\.%]*\]\s*$' } | ForEach-Object { Write-Host "   $_" }
-  Ok "Anciennes versions des composants supprimées (les mises à jour restent désinstallables)."
+  if ($LASTEXITCODE -eq 0) { Ok "Anciennes versions des composants supprimées (les mises à jour restent désinstallables)." }
+  else { Echec "nettoyage des composants (DISM code $LASTEXITCODE)." }
 }
 
 if ($Reparation) {
   Etape "Réparation des fichiers système (DISM + SFC, peut prendre 15 min)"
   DISM /Online /Cleanup-Image /RestoreHealth 2>&1 | ForEach-Object { "$_" -replace "`0","" } | Where-Object { $_ -match '\S' -and $_ -notmatch '^\s*\[[=\s\d\.%]*\]\s*$' } | ForEach-Object { Write-Host "   $_" }
+  $codeDism = $LASTEXITCODE
   sfc /scannow 2>&1 | ForEach-Object { "$_" -replace "`0","" } | Where-Object { $_ -match '\S' -and $_ -notmatch '\d+\s*%' } | ForEach-Object { Write-Host "   $_" }
-  Ok "Réparation terminée."
+  $codeSfc = $LASTEXITCODE
+  if ($codeDism -ne 0) { Echec "DISM /RestoreHealth (code $codeDism)." }
+  if ($codeSfc -ne 0) { Echec "SFC (code $codeSfc) : voir C:\Windows\Logs\CBS\CBS.log." }
+  if (-not $codeDism -and -not $codeSfc) { Ok "Réparation terminée." }
 }
 
 Etape "Vérifications"
 $mem = Get-CimInstance Win32_PhysicalMemory | Select-Object -First 1
-$ram = $mem.ConfiguredClockSpeed; if (-not $ram) { $ram = $mem.Speed }
-if ($ram) { Write-Host " - Vitesse RAM actuelle : $ram MHz (max annoncée : $($mem.Speed) MHz)" } else { Write-Host " - Vitesse RAM : non communiquée par ce PC." }
+# v5.6 : vitesse ACTUELLE = ConfiguredClockSpeed seulement ; Speed = vitesse max annoncée (jamais présentée comme actuelle)
+$ram = $mem.ConfiguredClockSpeed
+if ($ram) { Write-Host " - Vitesse RAM actuelle : $ram MHz$(if ($mem.Speed) { " (max annoncée : $($mem.Speed) MHz)" })" }
+elseif ($mem.Speed) { Write-Host " - Vitesse RAM actuelle : non communiquée par ce PC (max annoncée : $($mem.Speed) MHz)." }
+else { Write-Host " - Vitesse RAM : non communiquée par ce PC." }
 if (($mem.SMBIOSMemoryType -eq 26 -and $ram -and $ram -le 2666) -or ($mem.SMBIOSMemoryType -eq 34 -and $ram -and $ram -le 4800)) {
   Write-Host "   -> RAM à sa vitesse de base : active XMP/EXPO/DOCP dans le BIOS si ta RAM le permet." -ForegroundColor Yellow
 }
-Write-Host "`nOptimisation terminée. Redémarre le PC pour tout appliquer." -ForegroundColor Green
+if ($script:echecs) { Write-Host "`nOptimisation terminée avec $($script:echecs) échec(s) (détails ci-dessus). Redémarre le PC pour appliquer le reste." -ForegroundColor Red }
+else { Write-Host "`nOptimisation terminée. Redémarre le PC pour tout appliquer." -ForegroundColor Green }
 if (-not $NonInteractif) {
   Write-Host "Pour annuler : tape 'rstrui' dans Démarrer et choisis le point « Avant ... »."
   Read-Host "Appuie sur Entrée pour fermer"
 }
+if ($script:echecs) { exit 1 } else { exit 0 }
