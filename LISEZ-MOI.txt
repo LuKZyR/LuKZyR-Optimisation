@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.10). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.11). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -150,7 +150,7 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.10",
+           "build": "5.11",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
@@ -218,6 +218,19 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+CORRECTIF v0.1 bêta (version interne 5.11)
+  - « Moins de pub et de suivi » : sur Windows 11 récent (24H2 et plus), Windows protège
+    certains réglages (widgets, fil d'actualités...) par un pilote système : même en
+    administrateur, aucun programme non-Microsoft ne peut les modifier. Ce n'était donc
+    pas une panne. Ces réglages sont maintenant affichés « ignoré (protégé par
+    Windows) » au lieu d'« ÉCHEC », et l'appli essaie d'abord un réglage équivalent du
+    compte (bouton Widgets masqué). Si tout est protégé, l'appli explique comment
+    masquer les widgets à la main (clic droit sur la barre des tâches > Paramètres).
+  - Rien n'est forcé : pas de prise de possession ni de changement des droits des
+    clés de Windows.
+  - « Tout annuler » traite ces réglages de la même façon (ignorés, pas d'échec ; une
+    valeur déjà à son état d'origine n'est pas réécrite).
 
 CORRECTIF v0.1 bêta (version interne 5.10)
   - Plantage au 1er changement de page réparé (« System.OverflowException » dans

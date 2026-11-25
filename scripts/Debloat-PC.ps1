@@ -19,6 +19,33 @@ function Etape($t) { Write-Host "`n==> $t" -ForegroundColor Cyan }
 $script:echecs = 0
 function Echec($t) { Write-Host " - ÉCHEC : $t" -ForegroundColor Red; $script:echecs++ }
 function reg { & reg.exe @args; if ($LASTEXITCODE -ne 0) { Echec "registre ($($args[1]) $($args[3]))" } }
+# v5.11 : écriture DWORD par .NET (plus reg.exe). Windows 11 24H2+ protège certaines valeurs (pilote UCPD :
+#   widgets, flux d'actualités, recherche...) : même en administrateur, l'écriture est refusée à tout programme
+#   non-Microsoft. Ce n'est pas une panne : ligne neutre « ignoré (protégé par Windows) », jamais compté comme échec.
+#   Aucune prise de possession ni modification des droits des clés système.
+$script:proteges = 0
+function Est-Protege($ex) { for ($e = $ex; $e; $e = $e.InnerException) { if ($e -is [System.UnauthorizedAccessException] -or $e -is [System.Security.SecurityException]) { return $true } }; return $false }
+function Reg-Dword($chemin, $nom, [int]$valeur) {
+  # renvoie "ok", "deja", "protege" ou "echec"
+  $racine, $sous = $chemin -split '\\', 2
+  # vue 64 bits explicite (même si PowerShell 32 bits) : mêmes clés que reg.exe 64 bits
+  $ruche = switch ($racine) { "HKLM" { [Microsoft.Win32.RegistryHive]::LocalMachine } "HKCU" { [Microsoft.Win32.RegistryHive]::CurrentUser } default { $null } }
+  $base = $null; if ($null -ne $ruche) { try { $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey($ruche, [Microsoft.Win32.RegistryView]::Registry64) } catch { $base = $null } }
+  if (-not $base) { Echec "registre ($chemin $nom) : racine inconnue"; return "echec" }
+  try {
+    $k = $base.OpenSubKey($sous, $false)
+    if ($k) { try { if (@($k.GetValueNames()) -contains $nom -and "$($k.GetValueKind($nom))" -eq "DWord" -and [int]$k.GetValue($nom) -eq $valeur) { return "deja" } } finally { $k.Close() } }
+  } catch {}
+  try {
+    $k = $base.CreateSubKey($sous)   # crée aussi les clés parentes manquantes (ex. « Windows Feeds »)
+    if (-not $k) { Echec "registre ($chemin $nom) : clé impossible à créer"; return "echec" }
+    try { $k.SetValue($nom, $valeur, [Microsoft.Win32.RegistryValueKind]::DWord) } finally { $k.Close() }
+    return "ok"
+  } catch {
+    if (Est-Protege $_.Exception) { $script:proteges++; Write-Host " - ignoré (protégé par Windows) : $chemin\$nom" -ForegroundColor DarkGray; return "protege" }
+    Echec "registre ($chemin $nom) : $($_.Exception.Message)"; return "echec"
+  }
+}
 if (-not $NonInteractif) {
   $Debloat = $true; $Telemetrie = $true
   $Copilot  = (Read-Host "Supprimer aussi Copilot ? (o/n)") -eq "o"
@@ -79,31 +106,39 @@ Etape "Moins de pub et de suivi"
 # Pubs et suggestions dans le menu Démarrer / écran de verrouillage
 $cdm = "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
 foreach ($v in "SilentInstalledAppsEnabled","SystemPaneSuggestionsEnabled","SubscribedContent-338388Enabled","SubscribedContent-338389Enabled","SubscribedContent-353694Enabled","SubscribedContent-353696Enabled","SubscribedContent-310093Enabled","SoftLandingEnabled","RotatingLockScreenOverlayEnabled") {
-  reg add $cdm /v $v /t REG_DWORD /d 0 /f | Out-Null
+  [void](Reg-Dword $cdm $v 0)
 }
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v Start_IrisRecommendations /t REG_DWORD /d 0 /f | Out-Null
-reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f | Out-Null
+[void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" Start_IrisRecommendations 0)
+[void](Reg-Dword "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" DisableWindowsConsumerFeatures 1)
 # Identifiant publicitaire
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" /v Enabled /t REG_DWORD /d 0 /f | Out-Null
+[void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" Enabled 0)
 # Recherche Bing dans le menu Démarrer
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v BingSearchEnabled /t REG_DWORD /d 0 /f | Out-Null
-reg add "HKCU\Software\Policies\Microsoft\Windows\Explorer" /v DisableSearchBoxSuggestions /t REG_DWORD /d 1 /f | Out-Null
+[void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" BingSearchEnabled 0)
+[void](Reg-Dword "HKCU\Software\Policies\Microsoft\Windows\Explorer" DisableSearchBoxSuggestions 1)
 # Widgets (météo/actus dans la barre des tâches)
-reg add "HKLM\SOFTWARE\Policies\Microsoft\Dsh" /v AllowNewsAndInterests /t REG_DWORD /d 0 /f | Out-Null
-reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds" /v EnableFeeds /t REG_DWORD /d 0 /f | Out-Null
-Write-Host " - Pubs, suggestions, Bing et widgets réduits." -ForegroundColor Green
+# v5.11 : stratégie machine d'abord ; si Windows la protège, réglage équivalent du compte (bouton Widgets masqué,
+#         flux d'actualités de la barre des tâches coupé). Si tout est protégé : rien n'est forcé, on explique.
+$w = Reg-Dword "HKLM\SOFTWARE\Policies\Microsoft\Dsh" AllowNewsAndInterests 0
+if ($w -eq "protege" -or $w -eq "echec") { $w = Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" TaskbarDa 0 }
+$fl = Reg-Dword "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds" EnableFeeds 0
+if ($fl -eq "protege" -or $fl -eq "echec") { $fl = Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Feeds" ShellFeedsTaskbarViewMode 2 }
+if ($w -eq "ok" -or $w -eq "deja") { Write-Host " - Pubs, suggestions, Bing et widgets réduits." -ForegroundColor Green }
+else {
+  Write-Host " - Pubs, suggestions et Bing réduits." -ForegroundColor Green
+  if ($w -eq "protege") { Write-Host " - Widgets : réglage protégé par Windows sur ce PC (rien n'a été forcé). Pour les masquer : clic droit sur la barre des tâches > Paramètres de la barre des tâches > Widgets : Désactivé." }
+}
 
 Etape "Explorateur plus pratique"
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v HideFileExt /t REG_DWORD /d 0 /f | Out-Null
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v LaunchTo /t REG_DWORD /d 1 /f | Out-Null
+[void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" HideFileExt 0)
+[void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" LaunchTo 1)
 Write-Host " - Extensions de fichiers visibles, l'Explorateur s'ouvre sur « Ce PC »." -ForegroundColor Green
 }
 
 if ($Telemetrie) {
   Etape "Télémétrie"
   # Données de diagnostic au minimum + service « Expériences des utilisateurs connectés et télémétrie » arrêté
-  reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 1 /f | Out-Null
-  reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v TailoredExperiencesWithDiagnosticDataEnabled /t REG_DWORD /d 0 /f | Out-Null
+  [void](Reg-Dword "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" AllowTelemetry 1)
+  [void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" TailoredExperiencesWithDiagnosticDataEnabled 0)
   Stop-Service DiagTrack -Force
   try { Set-Service DiagTrack -StartupType Disabled -ErrorAction Stop; Write-Host " - Télémétrie réduite au minimum (service DiagTrack désactivé)." -ForegroundColor Green }
   catch { if (Get-Service DiagTrack) { Echec "service DiagTrack non désactivé ($($_.Exception.Message))" } else { Write-Host " - Service DiagTrack absent sur ce PC." } }
@@ -121,8 +156,8 @@ if ($Copilot) {
   } else { Write-Host " - Appli Copilot absente." }
   # ne revient pas pour les nouveaux comptes
   try { Get-AppxProvisionedPackage -Online -ErrorAction Stop | Where-Object { $_.DisplayName -like "*Copilot*" } | ForEach-Object { try { [void](Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction Stop); Write-Host " - Copilot retiré de l'image Windows (nouveaux comptes)." } catch {} } } catch {}
-  reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f | Out-Null
-  reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v ShowCopilotButton /t REG_DWORD /d 0 /f | Out-Null
+  [void](Reg-Dword "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" TurnOffWindowsCopilot 1)
+  [void](Reg-Dword "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" ShowCopilotButton 0)
   Write-Host " - Copilot désactivé." -ForegroundColor Green
 }
 
@@ -153,6 +188,7 @@ if ($Edge -and -not $SansEdge) {
   if ($LASTEXITCODE -ne 0) { $script:echecs++ }
 }
 
+if ($script:proteges) { Write-Host "`n$($script:proteges) réglage(s) ignoré(s) car protégé(s) par Windows (normal sur Windows 11 récent, ce n'est pas une erreur)." }
 if ($script:echecs) { Write-Host "`nNettoyage terminé avec $($script:echecs) échec(s) (détails ci-dessus)." -ForegroundColor Red }
 else { Write-Host "`nNettoyage terminé." -ForegroundColor Green }
 Write-Host "Rien de critique n'a été touché : Store, Xbox, Defender, Windows Update, pilotes et Photos sont intacts."

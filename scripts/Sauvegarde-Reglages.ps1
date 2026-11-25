@@ -38,6 +38,7 @@ $script:CatalogueReglages = @{
       "HKCU\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo|Enabled", "HKCU\Software\Microsoft\Windows\CurrentVersion\Search|BingSearchEnabled",
       "HKCU\Software\Policies\Microsoft\Windows\Explorer|DisableSearchBoxSuggestions", "HKLM\SOFTWARE\Policies\Microsoft\Dsh|AllowNewsAndInterests",
       "HKLM\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds|EnableFeeds",
+      "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|TaskbarDa", "HKCU\Software\Microsoft\Windows\CurrentVersion\Feeds|ShellFeedsTaskbarViewMode",
       "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|HideFileExt", "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|LaunchTo") }
   "telemetrie" = @{ Registre = @("HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection|AllowTelemetry",
       "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy|TailoredExperiencesWithDiagnosticDataEnabled")
@@ -177,11 +178,27 @@ function Resume-Sauvegarde {
   return $l
 }
 
+# v5.11 : valeur protégée par Windows (pilote UCPD, Windows 11 24H2+) : écriture refusée même en administrateur
+function Est-Protege($ex) { for ($e = $ex; $e; $e = $e.InnerException) { if ($e -is [System.UnauthorizedAccessException] -or $e -is [System.Security.SecurityException]) { return $true } }; return $false }
+function Etat-Identique($a, $b) {
+  if (-not $a -or -not $b) { return $false }
+  if (-not $a.Existe -and -not $b.Existe) { return $true }
+  if ([bool]$a.Existe -ne [bool]$b.Existe -or "$($a.Type)" -ne "$($b.Type)") { return $false }
+  return ((@($a.Valeur) -join "`n") -eq (@($b.Valeur) -join "`n"))
+}
 # Restaure tout, puis vide la sauvegarde (un nouveau passage repart de l'état restauré)
 function Restaurer-Tout {
-  $d = Lire-Sauvegarde; $ok = 0; $ko = 0
+  $d = Lire-Sauvegarde; $ok = 0; $ko = 0; $ign = 0
   foreach ($k in $d.Registre.Keys) {
-    try { Ecrire-ValeurReg $k $d.Registre[$k]; $ok++ } catch { $ko++; Write-Host " - Échec registre $k : $($_.Exception.Message)" -ForegroundColor Red }
+    $orig = $d.Registre[$k]
+    # v5.11 : déjà à la valeur d'origine (ex. réglage protégé jamais modifié) : rien à écrire
+    $deja = $false; try { $deja = Etat-Identique (Lire-ValeurReg $k) $orig } catch {}
+    if ($deja) { $ok++; continue }
+    try { Ecrire-ValeurReg $k $orig; $ok++ }
+    catch {
+      if (Est-Protege $_.Exception) { $ign++; Write-Host " - ignoré (protégé par Windows) : $k" -ForegroundColor DarkGray }
+      else { $ko++; Write-Host " - Échec registre $k : $($_.Exception.Message)" -ForegroundColor Red }
+    }
   }
   foreach ($s in $d.Services.Keys) {
     try { Set-Service $s -StartupType $d.Services[$s] -ErrorAction Stop; if ($d.Services[$s] -ne "Disabled") { Start-Service $s }; $ok++ } catch { $ko++; Write-Host " - Échec service $s" -ForegroundColor Red }
@@ -221,7 +238,7 @@ function Restaurer-Tout {
   if ($d.Dns.Count) { Clear-DnsClientCache }
   if (-not $ko) { Remove-Item $script:FichierSauvegarde -Force }
   else { Write-Host " - $ko élément(s) non restauré(s) : la sauvegarde est conservée." -ForegroundColor Yellow }
-  return @{ Ok = $ok; Ko = $ko }
+  return @{ Ok = $ok; Ko = $ko; Ignores = $ign }
 }
 
 # --- Exécution directe ---
@@ -235,6 +252,6 @@ if ($MyInvocation.InvocationName -ne '.') {
   if ($Restaurer) {
     Write-Host "==> Restauration des réglages d'origine"
     if (Sauvegarde-Vide) { Write-Host " - Rien à restaurer (aucune sauvegarde)." }
-    else { $r = Restaurer-Tout; Write-Host " - $($r.Ok) réglage(s) restauré(s), $($r.Ko) échec(s). Redémarre le PC pour tout appliquer."; if ($r.Ko) { exit 1 } }
+    else { $r = Restaurer-Tout; Write-Host " - $($r.Ok) réglage(s) restauré(s), $($r.Ko) échec(s)$(if ($r.Ignores) { ", $($r.Ignores) ignoré(s) (protégés par Windows)" }). Redémarre le PC pour tout appliquer."; if ($r.Ko) { exit 1 } }
   }
 }
