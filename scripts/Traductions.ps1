@@ -100,6 +100,8 @@ $EN = @{
   "Désactiver VBS / intégrité de la mémoire" = "Disable VBS / memory integrity"; "+5 à 10 % de FPS, un peu moins de sécurité." = "+5 to 10% FPS, slightly less security."
   "TRIM des SSD" = "SSD TRIM"; "Garde les SSD rapides." = "Keeps SSDs fast."
   "Nettoyage des fichiers temporaires" = "Temporary files cleanup"; "Vide les dossiers Temp de Windows et de l'utilisateur." = "Empties the Windows and user Temp folders."
+  "Nettoyage des caches shaders et miniatures" = "Shader and thumbnail cache cleanup"
+  "Nettoyer" = "Clean up"
   "Désactiver l'hibernation" = "Disable hibernation"; "Libère plusieurs Go sur C: et coupe le démarrage rapide." = "Frees several GB on C: and turns off fast startup."
   "Assistant de stockage" = "Storage Sense"; "Nettoyage automatique des fichiers inutiles." = "Automatic cleanup of unneeded files."
   "Désactiver la transparence" = "Disable transparency"; "Effets visuels plus légers." = "Lighter visual effects."
@@ -126,7 +128,7 @@ $EN = @{
   "Guide BIOS personnalisé" = "Personalised BIOS guide"; "Restaurer le système" = "System Restore"; "Applis au démarrage" = "Startup apps"
   "Gestionnaire de périphériques" = "Device Manager"; "Nettoyage de disque" = "Disk Cleanup"; "Redémarrer le PC" = "Restart the PC"; "Redémarrer maintenant ?" = "Restart now?"
   "Tout annuler" = "Undo everything"; "Remet les réglages d'origine (registre, services, alimentation, DNS, démarrage)." = "Restores the original settings (registry, services, power, DNS, startup)."
-  "Non annulables : applis supprimées (débloat, Copilot, OneDrive) ou installées, Edge désinstallé, fichiers temporaires effacés, réparation DISM/SFC. Pour ça : « Restaurer le système » (point de restauration)." = "Cannot be undone: removed apps (debloat, Copilot, OneDrive) or installed apps, uninstalled Edge, deleted temp files, DISM/SFC repair. For those: `"System Restore`" (restore point)."
+  "Non annulables : applis supprimées (débloat, Copilot, OneDrive) ou installées, Edge désinstallé, fichiers temporaires ou caches shaders / miniatures effacés, réparation DISM/SFC. Pour ça : « Restaurer le système » (point de restauration)." = "Cannot be undone: removed apps (debloat, Copilot, OneDrive) or installed apps, uninstalled Edge, deleted temp files or shader / thumbnail caches, DISM/SFC repair. For those: `"System Restore`" (restore point)."
   "Animations" = "Animations"; "Transitions et effets de l'interface. Désactive-les sur un PC lent." = "Interface transitions and effects. Turn them off on a slow PC."
   "Thème clair" = "Light theme"; "Interface claire au lieu de sombre (l'accent violet reste)." = "Light interface instead of dark (the purple accent stays)."
   "Langue" = "Language"; "Français ou English (l'interface redémarre)." = "Français or English (the interface restarts)."
@@ -153,7 +155,7 @@ $EN = @{
   "Rien à annuler : aucun réglage n'a encore été modifié par LuKZyR Optimisation (ou tout a déjà été restauré)." = "Nothing to undo: LuKZyR Optimization hasn't changed any setting yet (or everything was already restored)."
   "Ces réglages vont retrouver leur valeur d'origine :" = "These settings will get their original value back:"
   "et {0} autre(s)" = "and {0} more"
-  "Ne peuvent PAS être annulés : applis supprimées ou installées, Edge, fichiers temporaires effacés. Pour ça, utilise « Restaurer le système »." = "CANNOT be undone: removed or installed apps, Edge, deleted temp files. For those, use `"System Restore`"."
+  "Ne peuvent PAS être annulés : applis supprimées ou installées, Edge, fichiers temporaires ou caches shaders / miniatures effacés. Pour ça, utilise « Restaurer le système »." = "CANNOT be undone: removed or installed apps, Edge, deleted temp files or shader / thumbnail caches. For those, use `"System Restore`"."
   "Tout annuler maintenant ?" = "Undo everything now?"
   "Windows a refusé le redémarrage direct dans le BIOS ({0}).`nUtilise la touche indiquée dans le guide au démarrage." = "Windows refused to restart directly into the BIOS ({0}).`nUse the key shown in the guide at boot."
   "PC portable · " = "Laptop · "
@@ -195,6 +197,13 @@ $EN = @{
   'Vide les dossiers Temp de Windows et de l''utilisateur (fichiers effacés).' = 'Empties the Windows and user Temp folders (files are deleted).'
   'Nettoyage de disque Windows' = 'Windows Disk Cleanup'
   'Ouvre l''outil Windows pour vider la corbeille, les anciennes mises à jour, etc.' = 'Opens the Windows tool to empty the recycle bin, old updates, etc.'
+  # v5.16
+  'Vide les caches de shaders (DirectX, NVIDIA, AMD, Intel) et les miniatures / icônes de l''Explorateur. Les premiers lancements de jeu peuvent recompiler les shaders (un court gel). Cache uniquement : sans risque, mais non annulable.' = 'Clears shader caches (DirectX, NVIDIA, AMD, Intel) and Explorer thumbnail / icon caches. The first game launches may recompile shaders (a short stutter). Cache only: safe, but cannot be undone.'
+  'Vide les caches de shaders et les miniatures de l''Explorateur. Les premiers lancements de jeu peuvent recompiler les shaders (un court gel).' = 'Clears shader caches and Explorer thumbnails. The first game launches may recompile shaders (a short stutter).'
+  'Vide les caches de shaders (DirectX, NVIDIA, AMD, Intel) et les caches d''icônes / miniatures de l''Explorateur.' = 'Clears shader caches (DirectX, NVIDIA, AMD, Intel) and Explorer icon / thumbnail caches.'
+  'Les premiers lancements de jeu peuvent recompiler les shaders (un court gel).' = 'The first game launches may recompile shaders (a short stutter).'
+  'Cache uniquement : sans risque pour Windows, mais « Tout annuler » ne peut pas le défaire.' = 'Cache only: safe for Windows, but `"Undo everything`" cannot undo it.'
+  'Les fichiers en cours d''utilisation sont laissés en place.' = 'Files in use are left in place.'
   'Stockage, réparation, sécurité et raccourcis Windows.' = 'Storage, repair, safety and Windows shortcuts.'
   'Revenir à un point de restauration (créé avant chaque application).' = 'Go back to a restore point (created before every apply).'
   'Voir les composants et leurs pilotes.' = 'See components and their drivers.'

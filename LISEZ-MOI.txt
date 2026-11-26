@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.15). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.16). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -79,8 +79,8 @@ L'INTERFACE (barre latérale à gauche)
                 prochain lancement.
   NETTOYAGE     Windows plus léger (débloat, Copilot, OneDrive, Edge), confidentialité
                 (télémétrie, Optimisation de la distribution), fichiers (temporaires,
-                assistant de stockage, nettoyage des composants Windows (WinSxS),
-                outil Nettoyage de disque).
+                caches shaders et miniatures, assistant de stockage, nettoyage des
+                composants Windows (WinSxS), outil Nettoyage de disque).
   APPLICATIONS  Jeux : Steam, Epic Games, Ubisoft Connect, Rockstar Games, EA app,
                 Battle.net, GOG Galaxy. Communication et musique : Discord, Spotify.
                 Navigateurs : Brave. Création et utilitaires : OBS Studio, 7-Zip, VLC.
@@ -175,13 +175,13 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.15",
+           "build": "5.16",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
          }
   "version" est le numéro public, "build" le numéro interne : tant que la version
-  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.16 > 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
   Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
   téléchargé est vérifié et supprimé s'il ne correspond pas.
   Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
@@ -243,6 +243,17 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉ v0.1 bêta (version interne 5.16)
+  - Nettoyage > Fichiers : « Nettoyage des caches shaders et miniatures »
+    (décoché par défaut, badge NON RÉVERSIBLE). Vide le contenu des caches
+    DirectX (D3DSCache), NVIDIA, AMD et Intel, et les fichiers thumbcache_*.db /
+    iconcache_*.db de l'Explorateur. Les dossiers eux-mêmes restent en place ;
+    les fichiers utilisés (souvent par l'Explorateur) sont ignorés, l'Explorateur
+    n'est pas redémarré. Les premiers lancements de jeu peuvent recompiler les
+    shaders (un court gel). Cache uniquement : « Tout annuler » ne le remet pas.
+    Même action disponible tout de suite avec le bouton « Nettoyer » de la page
+    Nettoyage, ou via APPLIQUER si la case est cochée.
 
 NOUVEAUTÉ v0.1 bêta (version interne 5.15)
   - Animations plus fluides : le minuteur des animations est maintenant précis

@@ -5,7 +5,8 @@ param(
   [switch]$Transparence, [switch]$OptimDistribution, [switch]$Reparation,
   [switch]$JeuxFenetres, [switch]$VRR, [switch]$EdgeArrierePlan, [switch]$DelaiDemarrage, [switch]$AppsArrierePlan,
   [switch]$WinSxS, [switch]$PlanEquilibre,
-  [switch]$ModeAlimPerf, [switch]$GpuJeux, [switch]$OptimLecteurs
+  [switch]$ModeAlimPerf, [switch]$GpuJeux, [switch]$OptimLecteurs,
+  [switch]$CachesShaders
 )
 # Optimisation Windows 10/11 - générique (s'adapte au PC)
 # Sans paramètre : mode console interactif (tout, avec questions pour VBS et DISM/SFC).
@@ -43,9 +44,10 @@ function Est-Portable {
 }
 
 $reglages = "Alimentation","ModeJeu","PlanifGPU","PrioriteJeux","Souris","VBS","TRIM","NettoyageTemp","Hibernation","AssistantStockage","Transparence","OptimDistribution","Reparation",
-  "JeuxFenetres","VRR","EdgeArrierePlan","DelaiDemarrage","AppsArrierePlan","WinSxS","PlanEquilibre","ModeAlimPerf","GpuJeux","OptimLecteurs"
+  "JeuxFenetres","VRR","EdgeArrierePlan","DelaiDemarrage","AppsArrierePlan","WinSxS","PlanEquilibre","ModeAlimPerf","GpuJeux","OptimLecteurs","CachesShaders"
 # Réglages jamais appliqués « par défaut » en mode console (réservés à un choix explicite)
-$optionnels = "VBS","Reparation","AppsArrierePlan","WinSxS","PlanEquilibre","ModeAlimPerf","GpuJeux"
+# v5.16 : CachesShaders aussi (cache : à demander explicitement)
+$optionnels = "VBS","Reparation","AppsArrierePlan","WinSxS","PlanEquilibre","ModeAlimPerf","GpuJeux","CachesShaders"
 $tout = -not ($reglages | Where-Object { $PSBoundParameters.ContainsKey($_) })
 if ($tout -and -not $NonInteractif) {
   # Mode console : tout sauf VBS et réparation, qui sont demandés
@@ -185,6 +187,73 @@ if ($NettoyageTemp) {
   $gain = 0; foreach ($l in $lecteurs) { $gain += ((Get-PSDrive $l).Free - $avant[$l]) }
   $gain = [math]::Max(0.0, [math]::Round($gain / 1MB))
   Ok "Fichiers temporaires supprimés ($gain Mo libérés ; les fichiers en cours d'utilisation sont ignorés)."
+}
+
+# v5.16 : caches de shaders (DirectX / NVIDIA / AMD / Intel) et caches d'icônes / miniatures
+# de l'Explorateur. On ne supprime QUE le contenu des dossiers listés (jamais le dossier
+# lui-même). Fichiers verrouillés = ignorés, sans tuer l'Explorateur. Non annulable (c'est un cache).
+if ($CachesShaders) {
+  Etape "Nettoyage des caches shaders et miniatures"
+  $local = $env:LOCALAPPDATA
+  $racines = @(
+    (Join-Path $local "D3DSCache"),
+    (Join-Path $local "NVIDIA\DXCache"),
+    (Join-Path $local "NVIDIA\GLCache"),
+    (Join-Path $local "NVIDIA Corporation\NV_Cache"),
+    (Join-Path $local "AMD\DxCache"),
+    (Join-Path $local "AMD\DxcCache"),
+    (Join-Path $local "AMD\VkCache"),
+    (Join-Path $local "AMD\GLCache"),
+    (Join-Path $local "Intel\ShaderCache"),
+    (Join-Path $local "Intel\DXCache"),
+    (Join-Path $local "Intel\GLCache"),
+    (Join-Path $local "Intel\VkCache")
+  )
+  function Sous-Racine($chemin, $racine) {
+    try {
+      $c = [IO.Path]::GetFullPath($chemin)
+      $r = [IO.Path]::GetFullPath($racine).TrimEnd('\')
+      return $c.Equals($r, [StringComparison]::OrdinalIgnoreCase) -or $c.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)
+    } catch { return $false }
+  }
+  # Vide le CONTENU de $d (fichiers et sous-dossiers). $d lui-même n'est jamais supprimé.
+  # Les jonctions / liens ne sont pas suivis (ni supprimés).
+  function Vider-ContenuCache($d) {
+    $gain = [int64]0; $ok = 0; $saut = 0
+    foreach ($e in @(Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue)) {
+      if (-not (Sous-Racine $e.FullName $d)) { $saut++; continue }
+      if ($e.Attributes -band [IO.FileAttributes]::ReparsePoint) { $saut++; continue }
+      if ($e.PSIsContainer) {
+        $r = Vider-ContenuCache $e.FullName
+        $gain += $r.Gain; $ok += $r.Ok; $saut += $r.Saut
+        try { [IO.Directory]::Delete($e.FullName, $false) } catch {}
+      } else {
+        $taille = [int64]0; try { $taille = [int64]$e.Length } catch {}
+        try { [IO.File]::Delete($e.FullName); $gain += $taille; $ok++ } catch { $saut++ }
+      }
+    }
+    return @{ Gain = $gain; Ok = $ok; Saut = $saut }
+  }
+  $total = [int64]0; $nf = 0; $ns = 0; $vus = 0
+  foreach ($d in $racines) {
+    if (-not $d -or -not (Test-Path -LiteralPath $d)) { continue }
+    $vus++
+    $r = Vider-ContenuCache $d
+    $total += $r.Gain; $nf += $r.Ok; $ns += $r.Saut
+  }
+  $expl = Join-Path $local "Microsoft\Windows\Explorer"
+  if ($expl -and (Test-Path -LiteralPath $expl)) {
+    $vus++
+    foreach ($e in @(Get-ChildItem -LiteralPath $expl -Force -ErrorAction SilentlyContinue -File | Where-Object { $_.Name -match '^(thumbcache|iconcache)_.*\.db$' })) {
+      if (-not (Sous-Racine $e.FullName $expl)) { $ns++; continue }
+      $taille = [int64]0; try { $taille = [int64]$e.Length } catch {}
+      try { [IO.File]::Delete($e.FullName); $total += $taille; $nf++ } catch { $ns++ }
+    }
+  }
+  $mo = [math]::Max(0.0, [math]::Round($total / 1MB))
+  if ($nf -eq 0 -and $ns -eq 0) { Write-Host " - Aucun cache trouvé : rien à nettoyer." }
+  elseif ($nf -eq 0) { Ok "Aucun fichier libéré ($ns fichier(s) en cours d'utilisation laissés en place)." }
+  else { Ok "Caches shaders et miniatures nettoyés ($mo Mo libérés, $nf fichier(s) ; les fichiers en cours d'utilisation sont ignorés)." }
 }
 
 if ($Hibernation -and (A-Batterie)) {

@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.15)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.16)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.15
-$VersionInterne = "5.15"   # comparé comme [version] : 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10
+$VersionBeta = $true         # v0.1 bêta = version interne 5.16
+$VersionInterne = "5.16"   # comparé comme [version] : 5.16 > 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -2168,6 +2168,7 @@ $optims = @(
   @("AppsArrierePlan",   "Bloquer les applis du Store en arrière-plan", "Un peu moins de mémoire utilisée. Certaines notifications peuvent arriver en retard.", $false, "a", "perf", "DÉMARRAGE ET ARRIÈRE-PLAN"),
   @("OptimDistribution", "Désactiver l'Optimisation de la distribution", "Windows ne partage plus tes mises à jour avec d'autres PC (moins de bande passante).", $true, "s", "nettoyage", "CONFIDENTIALITÉ"),
   @("NettoyageTemp",     "Nettoyage des fichiers temporaires", "Vide les dossiers Temp de Windows et de l'utilisateur (fichiers effacés).", $true, "n", "nettoyage", "FICHIERS"),
+  @("CachesShaders",     "Nettoyage des caches shaders et miniatures", "Vide les caches de shaders (DirectX, NVIDIA, AMD, Intel) et les miniatures / icônes de l'Explorateur. Les premiers lancements de jeu peuvent recompiler les shaders (un court gel). Cache uniquement : sans risque, mais non annulable.", $false, "n", "nettoyage", "FICHIERS"),
   @("AssistantStockage", "Assistant de stockage", "Nettoyage automatique des fichiers inutiles.", $true, "s", "nettoyage", "FICHIERS"),
   @("WinSxS",            "Nettoyage des composants Windows", "Supprime les anciennes versions des composants (5 à 15 min). Mises à jour toujours désinstallables.", $false, "n", "nettoyage", "FICHIERS"),
   @("TRIM",              "TRIM des SSD", "Garde les SSD rapides.", $true, "s", "sysoutils", "STOCKAGE"),
@@ -2228,6 +2229,13 @@ Ligne-Verif "anim" 0xE74D "Effets d'animation de Windows" "Lecture..." "Ouvrir" 
 # Outil Windows (pas un réglage) : Nettoyage de disque
 $oCleanmgr = LigneOption $pN $gN.Y 0xEA99 "Nettoyage de disque Windows" "Ouvre l'outil Windows pour vider la corbeille, les anciennes mises à jour, etc."
 foreach ($el in $oCleanmgr.Elements) { $el.Add_Click({ Start-Process cleanmgr }) }
+# v5.16 : même nettoyage de caches, tout de suite (sans passer par APPLIQUER)
+$gN.Y += 70
+$oCaches = LigneOption $pN $gN.Y 0xEA99 "Nettoyage des caches shaders et miniatures" "Vide les caches de shaders et les miniatures de l'Explorateur. Les premiers lancements de jeu peuvent recompiler les shaders (un court gel)." -Badge "n"
+$bCaches = Bouton $oCaches.Carte "Nettoyer" 756 13 148 36 -Principal
+$bCaches.Add_Click({ Nettoyer-CachesMaintenant })
+foreach ($el in $oCaches.Elements) { $el.Add_Click({ Nettoyer-CachesMaintenant }) }
+$gN.Y += 70
 
 # ===================== PERFORMANCE > SESSION DE JEU (v5.7) =====================
 # Ferme des applis d'arrière-plan pendant qu'on joue, puis les relance. Rien n'est désinstallé, aucun
@@ -3258,7 +3266,7 @@ $bAnnuler = Bouton $oAnnuler.Carte "Tout annuler" 756 13 148 36 -Couleur $cOrang
 foreach ($el in $oAnnuler.Elements) { $el.Add_Click({ Tout-Annuler }) }
 $bAnnuler.Add_Click({ Tout-Annuler })
 $yS += 70
-[void](Lbl $pSys "Non annulables : applis supprimées (débloat, Copilot, OneDrive) ou installées, Edge désinstallé, fichiers temporaires effacés, réparation DISM/SFC. Pour ça : « Restaurer le système » (point de restauration)." 4 $yS 900 36 (Police 11.5) $cOrange $cFond)
+[void](Lbl $pSys "Non annulables : applis supprimées (débloat, Copilot, OneDrive) ou installées, Edge désinstallé, fichiers temporaires ou caches shaders / miniatures effacés, réparation DISM/SFC. Pour ça : « Restaurer le système » (point de restauration)." 4 $yS 900 36 (Police 11.5) $cOrange $cFond)
 $yS += 44
 $outils = @(
   @(0xE777, "Restaurer le système", "Revenir à un point de restauration (créé avant chaque application).", { Start-Process rstrui }),
@@ -4155,6 +4163,18 @@ $bAppliquer.Add_Click({
   }
   if (Confirmer-Plan $r) { Lancer-Plan $r.Plan -Resume $r.Liste }
 })
+# v5.16 : bouton « Nettoyer » de la page Nettoyage (le même travail que la case, tout de suite)
+function Nettoyer-CachesMaintenant {
+  if ($script:enCours) { [void](Boite (T "Attends la fin de l'opération en cours.")); return }
+  $msg = (T "Vide les caches de shaders (DirectX, NVIDIA, AMD, Intel) et les caches d'icônes / miniatures de l'Explorateur.") + "`n`n" +
+    (T "Les premiers lancements de jeu peuvent recompiler les shaders (un court gel).") + "`n`n" +
+    (T "Cache uniquement : sans risque pour Windows, mais « Tout annuler » ne peut pas le défaire.") + "`n`n" +
+    (T "Les fichiers en cours d'utilisation sont laissés en place.") + "`n`n" + (T "Continuer ?")
+  $ok = if ($TestAuto -or $env:LK_TEST) { $true } else { (Boite $msg "YesNo" "Question") -eq "Yes" }
+  if (-not $ok) { return }
+  $et = EtapeScript "Nettoyage des caches shaders et miniatures" "Optimisation-PC.ps1" "-NonInteractif -SansPointRestauration -CachesShaders"
+  Lancer-Plan @($et) -SansPoint -Resume @("Nettoyage des caches shaders et miniatures") -Titre (T "Nettoyage des caches shaders et miniatures")
+}
 function Lancer-Plan($plan, [switch]$Ici, $Resume = $null, $Titre = "", [switch]$SansPoint) {
   if ((Session-Active) -and -not $TestAuto) { [void](Boite (T "Une session de jeu est en cours : termine-la d'abord (Performance > Session de jeu), elle a fermé des applis et peut avoir changé le plan d'alimentation.")); return }
   $script:sansPoint = [bool]$SansPoint
@@ -4235,7 +4255,7 @@ function Tout-Annuler {
   $aff = @($liste | Select-Object -First 22)
   $msg = (T "Ces réglages vont retrouver leur valeur d'origine :") + "`n`n - " + ($aff -join "`n - ")
   if ($liste.Count -gt $aff.Count) { $msg += "`n - ... " + ((T "et {0} autre(s)") -f ($liste.Count - $aff.Count)) }
-  $msg += "`n`n" + (T "Ne peuvent PAS être annulés : applis supprimées ou installées, Edge, fichiers temporaires effacés. Pour ça, utilise « Restaurer le système ».")
+  $msg += "`n`n" + (T "Ne peuvent PAS être annulés : applis supprimées ou installées, Edge, fichiers temporaires ou caches shaders / miniatures effacés. Pour ça, utilise « Restaurer le système ».")
   if (-not $TestAuto -and -not $env:LK_TEST) { if ((Boite ($msg + "`n`n" + (T "Tout annuler maintenant ?")) "YesNo" "Warning") -ne "Yes") { return } }
   Log "Tout annuler : $($liste.Count) élément(s) à restaurer."
   Lancer-Plan @((EtapeScript "Restauration des réglages d'origine" "Sauvegarde-Reglages.ps1" "-Restaurer -NonInteractif")) -Ici:($script:pageActive -eq "accueil") -Resume $liste
