@@ -3,7 +3,7 @@
 =====================================================
 
 VERSION BÊTA
-  C'est la première version publique : v0.1 bêta (version interne 5.16). Elle a été
+  C'est la première version publique : v0.1 bêta (version interne 5.17). Elle a été
   testée, mais sur peu de PC différents. Si quelque chose cloche : Journal >
   « Exporter le journal », puis envoie le fichier avec une description du problème.
   Les numéros de version publics repartent de 0.1 (les anciennes « v5.x » étaient des
@@ -175,13 +175,13 @@ MISE À JOUR DE L'APPLI
   Fichier version.json (à la racine du dépôt, branche main) :
          {
            "version": "0.1 bêta",
-           "build": "5.16",
+           "build": "5.17",
            "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
            "notes": "Corrections et nouveautés",
            "sha256": ""
          }
   "version" est le numéro public, "build" le numéro interne : tant que la version
-  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.16 > 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
+  publique reste « 0.1 bêta », c'est "build" qui dit s'il y a du nouveau (comparé nombre par nombre : 5.17 > 5.16 > 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10 > 5.9).
   Les adresses doivent être en https et finir par .zip. Si "sha256" est donné, le zip
   téléchargé est vérifié et supprimé s'il ne correspond pas.
   Numéros acceptés : "0.1 bêta", "0.1-beta", "0.1.1", "0.2"... Une version finale
@@ -243,6 +243,20 @@ CHANGER LE LOGO
        « LuKZyR Optimisation.exe » avec le compilateur C# fourni avec Windows
        (.NET Framework 4, rien à installer). L'explorateur peut garder l'ancienne
        icône en cache quelques minutes.
+
+NOUVEAUTÉ v0.1 bêta (version interne 5.17)
+  - Détection matériel élargie (sans rien casser si un composant est inconnu) :
+    processeurs Intel (hybrides 12e gén. et Core Ultra) et AMD (Ryzen, X3D,
+    Threadripper, APU) ; cartes NVIDIA, AMD et Intel Arc / iGPU, plusieurs GPU,
+    pilote manquant, VRAM au-delà de 4 Go ; mémoire DDR3/4/5 et LPDDR soudée,
+    1 à plusieurs modules ; disques NVMe, SSD SATA, HDD et USB (plus de marques) ;
+    cartes mères MSI, ASUS, Gigabyte, ASRock, Biostar, NZXT et PC de marque
+    (Dell, HP, Lenovo, Acer…) avec page support, ou un lien générique.
+  - Machine virtuelle (QEMU, VMware, Hyper-V, VirtualBox…) : plus de faux
+    « pilote chipset AMD » ni « Windows et Ryzen » ; GPU de base affiché au
+    lieu de « GPU non détecté ». ARM64 : mode compatible, sans plantage.
+  - Correctifs du test 5.16 : bouton « Nettoyer » visible sur la carte (petit
+    écran 1024×768), résumé « élément(s) traité(s) » au lieu de « installé(s) ».
 
 NOUVEAUTÉ v0.1 bêta (version interne 5.16)
   - Nettoyage > Fichiers : « Nettoyage des caches shaders et miniatures »
