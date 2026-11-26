@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.15",
+  "build": "5.16",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.15) : animations fluides (environ 60 images/s au lieu de 30), démarrage plus rapide (interface mise en cache), fenêtre qui tient sur un écran 1024 px ; correctifs : « Appliquer ce DNS » avec une seule carte réseau, page Espace disque (liste et barres), critère Espace libre du score.",
-  "sha256": "eb7c623cce25bdfabd4452498761690c72598752d7b725b3f1157cf86fc9da1e"
+  "notes": "v0.1 bêta (build 5.16) : Nettoyage des caches shaders et miniatures (DirectX, NVIDIA, AMD, Intel, et caches d'icônes / miniatures de l'Explorateur). Décoché par défaut, non annulable (c'est un cache). Les premiers lancements de jeu peuvent recompiler les shaders. Bouton « Nettoyer » sur la page Nettoyage, ou via APPLIQUER.",
+  "sha256": "1eb05d18e4a7066de3e7621ff9cdbc2a7853ff3e04e77e9b15eac201c2833b99"
 }
