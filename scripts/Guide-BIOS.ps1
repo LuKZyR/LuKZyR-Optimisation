@@ -19,6 +19,85 @@ function Nettoyer-Valeur($v) {
   return $s
 }
 
+# v5.17 : typologie CPU / machine virtuelle / type de RAM (guide + interface)
+function Est-Virtuel($m) {
+  if (-not $m) { return $false }
+  $s = @(
+    $(if ($m.Cpu) { "$($m.Cpu.Name) $($m.Cpu.Manufacturer)" } else { "" })
+    $(if ($m.Board) { "$($m.Board.Manufacturer) $($m.Board.Product)" } else { "" })
+    $(if ($m.Bios) { "$($m.Bios.Manufacturer) $($m.Bios.SMBIOSBIOSVersion) $($m.Bios.Version)" } else { "" })
+    $(if ($m.Systeme) { "$($m.Systeme.Manufacturer) $($m.Systeme.Model)" } else { "" })
+    $(if ($m.Gpus) { @($m.Gpus | ForEach-Object { "$($_.Name) $($_.AdapterCompatibility)" }) -join " " } else { "" })
+  ) -join " "
+  if ($s -match '(?i)QEMU|TCG CPU|KVM|Bochs|SeaBIOS|OVMF|\bedk2\b|VirtualBox|innotek|VMware|Hyper-V|Virtual Machine|Xen\b|BHYVE|Parallels|Virtual CPU|Standard PC \(Q35|Standard PC \(i440FX|Virtio|Red Hat QXL') { return $true }
+  if ($m.Systeme -and "$($m.Systeme.Model)" -match '(?i)Virtual Machine|HVM|Google Compute|Amazon EC2') { return $true }
+  return $false
+}
+
+function Classer-Cpu($cpu) {
+  $r = [pscustomobject]@{ Marque = ""; Famille = ""; Virtuel = $false; Hybride = $false; X3D = $false; RyzenSerie = 0; IntelGen = 0; Arm = $false; Nom = "" }
+  if (-not $cpu) { return $r }
+  $nom = ("$($cpu.Name)" -replace '\s+', ' ').Trim()
+  $fab = "$($cpu.Manufacturer)"
+  $cm = "$fab $nom"
+  $r.Nom = $nom
+  $r.Virtuel = ($cm -match '(?i)QEMU|TCG CPU|KVM|Bochs|Virtual CPU|VirtualBox|VMware|Hyper-V|Xen\b')
+  $r.Arm = ($cm -match '(?i)\bARM\b|Snapdragon|Qualcomm|Ampere|Apple M\d|SQ\d') -or ("$env:PROCESSOR_ARCHITECTURE" -eq "ARM64") -or ("$env:PROCESSOR_ARCHITEW6432" -eq "ARM64")
+  if ($r.Arm) { $r.Marque = "ARM"; $r.Famille = "ARM" }
+  elseif ($cm -match '(?i)GenuineIntel|Intel|Core Ultra|\bi[3579]-|Pentium|Celeron|Xeon|\bAtom\b') { $r.Marque = "Intel" }
+  elseif ($cm -match '(?i)AuthenticAMD|\bAMD\b|Ryzen|Threadripper|Athlon|EPYC|Phenom|Sempron') { $r.Marque = "AMD" }
+  $r.X3D = $nom -match 'X3D'
+  if ($nom -match '(?i)Ryzen\s+(?:Threadripper\s+)?(?:PRO\s+)?(?:[3579]\s+)?(?:PRO\s+)?(\d)(\d{3})') { $r.RyzenSerie = [int]$matches[1] * 1000 }
+  elseif ($nom -match '(?i)Threadripper\s+(?:PRO\s+)?(\d)(\d{3})') { $r.RyzenSerie = [int]$matches[1] * 1000 }
+  elseif ($nom -match '(?i)Ryzen\s+AI') { $r.RyzenSerie = 200 }
+  if ($nom -match 'i[3579]-(\d{2})\d{3}') { $r.IntelGen = [int]$matches[1] }
+  elseif ($nom -match 'i[3579]-(\d)\d{3}') { $r.IntelGen = [int]$matches[1] }
+  elseif ($nom -match '(?i)Ultra\s+\d+\s+(\d)') { $r.IntelGen = [int]$matches[1] }
+  $ultra = $nom -match '(?i)Core(?:\((TM|R)\))?\s*Ultra'
+  $r.Hybride = ($r.Marque -eq "Intel" -and ($r.IntelGen -ge 12 -or $ultra))
+  if ($r.Marque -eq "AMD" -and $nom -match '(?i)Ryzen|Threadripper|EPYC') {
+    if ($nom -match '(?i)Threadripper') { $r.Famille = "Threadripper" }
+    elseif ($r.X3D) { $r.Famille = "X3D" }
+    elseif ($nom -match '(?i)\bAI\b|\b\d{3,4}G\b|\bHX\b|\bHS\b|\bGE\b') { $r.Famille = "APU" }
+    elseif ($nom -match '(?i)EPYC') { $r.Famille = "EPYC" }
+    else { $r.Famille = "Ryzen" }
+  } elseif ($r.Marque -eq "Intel") {
+    $r.Famille = if ($ultra) { "Core Ultra" } elseif ($r.Hybride) { "Intel hybride" } else { "Intel" }
+  }
+  return $r
+}
+
+function Type-Ram($code) {
+  try { $n = [int]$code } catch { return "" }
+  switch ($n) {
+    20 { "DDR" } 21 { "DDR2" } 24 { "DDR3" } 26 { "DDR4" } 27 { "DDR4" }
+    28 { "LPDDR" } 29 { "LPDDR2" } 30 { "LPDDR3" } 31 { "LPDDR4" } 32 { "LPDDR4X" }
+    34 { "DDR5" } 35 { "LPDDR5" } 36 { "LPDDR5X" }
+    default { "" }
+  }
+}
+
+function Marque-Disque($n) {
+  $s = "$n"
+  if ($s -match '(?i)Samsung') { "Samsung" }
+  elseif ($s -match '(?i)CT\d|Crucial|Micron') { "Crucial" }
+  elseif ($s -match '(?i)\bWD\b|Western Digital|SanDisk|WD[_ ]?(BLACK|BLUE|RED|GREEN|SN\d)') { "WD" }
+  elseif ($s -match '(?i)Kingston|SA400|SNV2|KC\d|NV2|NV3') { "Kingston" }
+  elseif ($s -match '(?i)Seagate|ST\d|FireCuda|BarraCuda') { "Seagate" }
+  elseif ($s -match '(?i)Kioxia|Toshiba|OCZ') { "Kioxia" }
+  elseif ($s -match '(?i)SK\s?Hynix|Hynix|Solidigm') { "SK Hynix" }
+  elseif ($s -match '(?i)ADATA|XPG') { "ADATA" }
+  elseif ($s -match '(?i)Corsair|MP600|MP400') { "Corsair" }
+  elseif ($s -match '(?i)Sabrent') { "Sabrent" }
+  elseif ($s -match '(?i)\bPNY\b') { "PNY" }
+  elseif ($s -match '(?i)Teamgroup|T-Force|\bT-CREATE') { "TeamGroup" }
+  elseif ($s -match '(?i)Silicon Power|SPCC') { "Silicon Power" }
+  elseif ($s -match '(?i)Lexar') { "Lexar" }
+  elseif ($s -match '(?i)Intel SSD|INTEL SSD') { "Intel" }
+  else { "" }
+}
+
+
 # ---------------------------------------------------------------------
 # 1) Lecture du matériel (Windows). Chaque mesure est protégée : une
 #    erreur donne simplement "inconnu".
@@ -73,7 +152,8 @@ $script:Chipsets = @{
   # AMD AM5
   "A620" = @("AMD", "AM5", "DDR5", "Pas d'overclocking du processeur sur A620 (PBO souvent absent)."); "B650" = @("AMD", "AM5", "DDR5", "")
   "B650E" = @("AMD", "AM5", "DDR5", ""); "X670" = @("AMD", "AM5", "DDR5", ""); "X670E" = @("AMD", "AM5", "DDR5", "")
-  "B840" = @("AMD", "AM5", "DDR5", ""); "B850" = @("AMD", "AM5", "DDR5", ""); "X870" = @("AMD", "AM5", "DDR5", ""); "X870E" = @("AMD", "AM5", "DDR5", "")
+  "B840" = @("AMD", "AM5", "DDR5", ""); "B850" = @("AMD", "AM5", "DDR5", ""); "X870" = @("AMD", "AM5", "DDR5", ""); "X870E" = @("AMD", "AM5", "DDR5", ""); "A620E" = @("AMD", "AM5", "DDR5", "Pas d'overclocking du processeur sur A620 (PBO souvent absent).")
+  "X399" = @("AMD", "TR4", "DDR4", ""); "TRX40" = @("AMD", "sTRX4", "DDR4", ""); "TRX50" = @("AMD", "sTR5", "DDR5", ""); "WRX90" = @("AMD", "sTR5", "DDR5", "")
   # Intel
   "H310" = @("Intel", "LGA1151", "DDR4", "Fréquence RAM limitée par le chipset (XMP souvent bloqué)."); "B360" = @("Intel", "LGA1151", "DDR4", "Fréquence RAM limitée par le chipset (XMP souvent bloqué)."); "B365" = @("Intel", "LGA1151", "DDR4", "Fréquence RAM limitée par le chipset (XMP souvent bloqué)."); "H370" = @("Intel", "LGA1151", "DDR4", "Fréquence RAM limitée par le chipset (XMP souvent bloqué).")
   "Z370" = @("Intel", "LGA1151", "DDR4", ""); "Z390" = @("Intel", "LGA1151", "DDR4", "")
@@ -82,11 +162,12 @@ $script:Chipsets = @{
   "H610" = @("Intel", "LGA1700", "DDR4 ou DDR5", "XMP non garanti sur H610."); "B660" = @("Intel", "LGA1700", "DDR4 ou DDR5", ""); "H670" = @("Intel", "LGA1700", "DDR4 ou DDR5", ""); "Z690" = @("Intel", "LGA1700", "DDR4 ou DDR5", "")
   "B760" = @("Intel", "LGA1700", "DDR4 ou DDR5", ""); "H770" = @("Intel", "LGA1700", "DDR4 ou DDR5", ""); "Z790" = @("Intel", "LGA1700", "DDR4 ou DDR5", "")
   "H810" = @("Intel", "LGA1851", "DDR5", ""); "B860" = @("Intel", "LGA1851", "DDR5", ""); "Z890" = @("Intel", "LGA1851", "DDR5", "")
+  "W680" = @("Intel", "LGA1700", "DDR4 ou DDR5", ""); "Q670" = @("Intel", "LGA1700", "DDR4 ou DDR5", "")
 }
 
 function Trouver-Chipset($modele) {
   $s = "$modele".ToUpper()
-  foreach ($mt in [regex]::Matches($s, '(?<![A-Z0-9])([ABHXZ]\d{3}E?)')) {
+  foreach ($mt in [regex]::Matches($s, '(?<![A-Z0-9])(TRX\d{2}|WRX\d{2}|[ABHXZ]\d{3}E?)')) {
     $c = $mt.Groups[1].Value
     if ($script:Chipsets.ContainsKey($c)) { return $c }
     $c2 = $c.TrimEnd('E'); if ($script:Chipsets.ContainsKey($c2)) { return $c2 }
@@ -149,12 +230,16 @@ function Get-ProfilBios($m) {
   $p.BiosVersion = Nettoyer-Valeur $m.Bios.SMBIOSBIOSVersion
   $p.BiosDate = Date-Bios $m.Bios.ReleaseDate
   # Processeur
-  $p.CpuNom = Nettoyer-Valeur $m.Cpu.Name
-  $cm = "$(Nettoyer-Valeur $m.Cpu.Manufacturer) $($p.CpuNom)"
-  $p.CpuMarque = if ($cm -match 'AMD|Ryzen|Athlon') { "AMD" } elseif ($cm -match 'Intel|Core|Pentium|Celeron|Xeon') { "Intel" } else { "" }
-  $p.RyzenSerie = if ($p.CpuNom -match 'Ryzen\s+(?:Threadripper\s+)?\d\s+(?:PRO\s+)?(\d)\d{3}') { [int]$matches[1] * 1000 } else { 0 }
-  $p.X3D = $p.CpuNom -match 'X3D'
-  $p.IntelGen = if ($p.CpuNom -match 'i\d-(\d{2})\d{3}') { [int]$matches[1] } elseif ($p.CpuNom -match 'i\d-(\d)\d{3}') { [int]$matches[1] } elseif ($p.CpuNom -match 'Core.*Ultra') { 15 } else { 0 }
+  $p.Virtuel = Est-Virtuel $m
+  $cls = Classer-Cpu $m.Cpu
+  $p.CpuNom = if ($cls.Nom) { $cls.Nom } else { Nettoyer-Valeur $m.Cpu.Name }
+  $p.CpuMarque = $cls.Marque
+  $p.CpuFamille = $cls.Famille
+  $p.RyzenSerie = $cls.RyzenSerie
+  $p.X3D = $cls.X3D
+  $p.IntelGen = $cls.IntelGen
+  $p.IntelHybride = $cls.Hybride
+  $p.Arm = $cls.Arm
   # Chipset
   $p.Chipset = Trouver-Chipset $p.Modele
   $p.Plateforme = ""; $p.ChipsetNote = ""
@@ -164,8 +249,13 @@ function Get-ProfilBios($m) {
   $p.RamGo = [math]::Round((($mems | Measure-Object -Property Capacity -Sum).Sum) / 1GB)
   $p.RamBarrettes = $mems.Count
   $t = 0; foreach ($x in $mems) { try { if ([int]$x.SMBIOSMemoryType) { $t = [int]$x.SMBIOSMemoryType; break } } catch {} }
-  $p.RamType = switch ($t) { 34 { "DDR5" } 26 { "DDR4" } 24 { "DDR3" } default { "" } }
+  $p.RamType = Type-Ram $t
   if (-not $p.RamType -and $p.Chipset -and $script:Chipsets[$p.Chipset][2] -notmatch 'ou') { $p.RamType = $script:Chipsets[$p.Chipset][2] }
+  $nSoudes = @($mems | Where-Object {
+    $ff = 0; try { $ff = [int]$_.FormFactor } catch {}
+    ($ff -eq 13) -or ("$($_.BankLabel) $($_.DeviceLocator)" -match '(?i)solder|onboard|system board')
+  }).Count
+  $p.RamSoudee = ($nSoudes -gt 0) -or ($p.RamType -match 'LPDDR')
   $vMax = 0; $vConf = 0
   foreach ($x in $mems) {
     try { $a = [int]$x.Speed; if ($a -gt $vMax) { $vMax = $a } } catch {}
@@ -181,17 +271,28 @@ function Get-ProfilBios($m) {
     else { $p.Xmp = "OK" }
   }
   # Carte graphique
-  $gp = @($m.Gpus | Where-Object { $_ -and "$($_.Name)" -notmatch 'Microsoft|Basic|Virtual|Remote|Parsec|Meta' })
-  $p.GpuNom = (@($gp | ForEach-Object { Nettoyer-Valeur $_.Name } | Where-Object { $_ }) -join " + ")
+  $tousG = @($m.Gpus | Where-Object { $_ })
+  $gp = @($tousG | Where-Object { "$($_.Name)" -notmatch '(?i)Microsoft Basic|Basic Display|Virtual Display|Remote Display|Parsec|Meta Quest|Indirect Display' })
+  if (-not $gp.Count) { $gp = @($tousG) }
+  $p.GpuNom = (@($gp | ForEach-Object {
+    $n = Nettoyer-Valeur $_.Name
+    $id = "$($_.PNPDeviceID)"
+    if ($id -match 'VEN_10DE' -and $n -match '(?i)Standard VGA|Basic Display|Microsoft Basic') { "NVIDIA GeForce (pilote non installé)" }
+    elseif ($id -match 'VEN_1002' -and $n -match '(?i)Standard VGA|Basic Display|Microsoft Basic') { "AMD Radeon (pilote non installé)" }
+    elseif ($id -match 'VEN_8086' -and $n -match '(?i)Standard VGA|Basic Display|Microsoft Basic') { "Intel Graphics (pilote non installé)" }
+    elseif ($n -match '(?i)QEMU|Bochs|Virtio|Red Hat|Standard VGA|Microsoft Basic|Basic Display|Hyper-V Video|VMware SVGA') { "Carte d'affichage de base" }
+    else { $n }
+  } | Where-Object { $_ }) -join " + ")
   $marques = @()
-  foreach ($g in $gp) {
+  foreach ($g in $tousG) {
     $n = "$($g.Name) $($g.AdapterCompatibility) $($g.PNPDeviceID)"
-    if ($n -match 'NVIDIA|GeForce|RTX|GTX|VEN_10DE') { $marques += "NVIDIA" }
-    elseif ($n -match 'Radeon|AMD|VEN_1002') { $marques += "AMD" }
-    elseif ($n -match 'Arc\b|VEN_8086.*DEV_56|Intel\(R\) Arc') { $marques += "Intel Arc" }
-    elseif ($n -match 'Intel|VEN_8086') { $marques += "Intel" }
+    if ($n -match '(?i)NVIDIA|GeForce|RTX|GTX|Quadro|TITAN|Tesla|VEN_10DE') { $marques += "NVIDIA" }
+    elseif ($n -match '(?i)Radeon|FirePro|Instinct|VEN_1002') { $marques += "AMD" }
+    elseif ($n -match '(?i)Arc\b|VEN_8086.*DEV_56|Intel\(R\) Arc') { $marques += "Intel Arc" }
+    elseif ($n -match '(?i)Intel|UHD|Iris|Xe Graphics|VEN_8086') { $marques += "Intel" }
   }
   $p.GpuMarques = @($marques | Select-Object -Unique)
+  $p.GpuBasique = (-not $p.GpuMarques.Count) -and [bool]$p.GpuNom
   $p.GpuDediee = $p.GpuNom -match 'RTX|GTX|RX\s?\d|Arc\s?[AB]\d|Radeon\s+(Pro|VII)'
   $p.GpuReBarOk = $p.GpuNom -match 'RTX\s?[3-9]\d|RX\s?[6-9]\d{3}|Arc'
   # Firmware / sécurité
@@ -221,6 +322,13 @@ function Url-Support($p) {
     "Lenovo"   { return "https://pcsupport.lenovo.com/fr/fr" }
     "Acer"     { return "https://www.acer.com/fr-fr/support" }
     "NZXT"     { return "https://nzxt.com/fr-FR/support" }
+    "Biostar"  { if ($mod) { return "https://www.biostar.com.tw/app/en/mb/introduction.php?S_name=$(& $enc $mod)" } else { return "https://www.biostar.com.tw/app/en/support/" } }
+    "Dynabook" { return "https://support.dynabook.com/" }
+    "Microsoft"{ return "https://www.microsoft.com/surface/support" }
+    "Samsung"  { return "https://www.samsung.com/support/" }
+    "Huawei"   { return "https://consumer.huawei.com/support/" }
+    "Fujitsu"  { return "https://www.fujitsu.com/support/" }
+    "Medion"   { return "https://www.medion.com/support" }
   }
   $q = (@($p.FabricantBrut, $mod, "BIOS support") | Where-Object { $_ }) -join " "
   return "https://www.google.com/search?q=$(& $enc $q)"
@@ -349,7 +457,7 @@ function Get-GuideBios($m) {
   if (-not $m) { $m = Lire-MaterielBios }
   $p = Get-ProfilBios $m
   $f = Infos-Fabricant $p
-  $amd = $p.CpuMarque -eq "AMD"; $intel = $p.CpuMarque -eq "Intel"
+  $amd = ($p.CpuMarque -eq "AMD" -and -not $p.Virtuel); $intel = ($p.CpuMarque -eq "Intel" -and -not $p.Virtuel)
   $L = New-Object System.Collections.Generic.List[string]
   function A([string]$t = "") { $L.Add($t) }
   function OuiNon($v, $oui = "oui", $non = "non") { if ($null -eq $v) { "inconnu" } elseif ($v) { $oui } else { $non } }
@@ -366,8 +474,10 @@ function Get-GuideBios($m) {
   A "Chipset         : $(if ($p.Chipset) { "$($p.Chipset) ($($p.CpuMarque) $($p.Plateforme))" } else { 'non déduit du nom de la carte' })"
   $dateTxt = if ($p.BiosDate) { $p.BiosDate.ToString('dd/MM/yyyy') } else { "date inconnue" }
   A "BIOS            : $(if ($p.BiosVersion) { "version $($p.BiosVersion)" } else { 'version inconnue' })$(if ($p.BiosDate) { " du $dateTxt" })"
-  A "Processeur      : $(if ($p.CpuNom) { $p.CpuNom } else { 'non détecté' })"
-  $ramTxt = if ($p.RamGo) { "$($p.RamGo) Go $($p.RamType) ($($p.RamBarrettes) barrette(s))".Replace("  ", " ") } else { "non détectée" }
+  if ($p.Virtuel) { A "Type            : PC virtuel (les réglages d'une carte mère physique ne s'appliquent généralement pas)" }
+  A "Processeur      : $(if ($p.CpuNom) { $p.CpuNom } else { 'non détecté' })$(if ($p.CpuFamille) { " ($($p.CpuFamille))" })"
+  if ($p.Arm) { A "Architecture    : ARM64 (mode compatible : certaines optimisations x86 ne s'appliquent pas)" }
+  $ramTxt = if ($p.RamGo) { "$($p.RamGo) Go $($p.RamType) ($($p.RamBarrettes) module(s))".Replace("  ", " ") + $(if ($p.RamSoudee) { ", mémoire soudée" } else { "" }) } else { "non détectée" }
   A "Mémoire         : $ramTxt"
   if ($p.RamVitesse) { A "Vitesse RAM     : $($p.RamVitesse) MHz actuellement$(if ($p.RamVitesseMax -gt $p.RamVitesse) { " (barrettes annoncées $($p.RamVitesseMax) MHz)" })" }
   A "Carte graphique : $(if ($p.GpuNom) { $p.GpuNom } else { 'non détectée' })"
@@ -377,6 +487,12 @@ function Get-GuideBios($m) {
   if ($null -ne $p.ReBar) { A "Resizable BAR   : $(OuiNon $p.ReBar 'actif' 'inactif')" }
   if ($p.Profil -eq "Inconnu") { A ""; A "/!\ Fabricant de la carte mère non reconnu : le guide ci-dessous est générique." }
   A ""
+  if ($p.Virtuel) {
+    A "=== RÉGLAGES CARTE MÈRE ==="
+    A "  - Sans objet sur une machine virtuelle : XMP / EXPO, Resizable BAR et PBO concernent une carte mère physique."
+    A "  - Tu peux quand même vérifier le firmware du guest (UEFI, Secure Boot, TPM) dans les options de l'hyperviseur."
+    return ($L -join "`r`n")
+  }
 
   A "=== 1. ENTRER DANS LE BIOS ==="
   A "  - Touche : $($f.Touche)."

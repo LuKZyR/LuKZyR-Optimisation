@@ -161,6 +161,7 @@ if ($TRIM) {
     $lettre = $_.DriveLetter
     $disk = $_ | Get-Partition | Get-Disk | Get-PhysicalDisk
     if ("$($disk.MediaType)" -eq 'HDD') { return }
+    if ("$($disk.BusType)" -match '(?i)USB|SD|MMC|1394|File Backed Virtual') { return }
     try { Optimize-Volume -DriveLetter $lettre -ReTrim -ErrorAction Stop; Ok "TRIM lancé sur $($lettre): ($(if ("$($disk.MediaType)" -eq 'SSD') { 'SSD' } else { "type « $($disk.MediaType) », $($disk.BusType)" }))"; $ssd++ }
     catch { Write-Host " - $($lettre): TRIM non pris en charge par ce disque ($($_.Exception.Message.Trim()))." }
   }
@@ -415,6 +416,7 @@ if ($OptimLecteurs) {
       $lettre = $_.DriveLetter
       $disk = $_ | Get-Partition | Get-Disk | Get-PhysicalDisk
       if ("$($disk.MediaType)" -eq 'HDD') { return }
+      if ("$($disk.BusType)" -match '(?i)USB|SD|MMC|1394|File Backed Virtual') { return }
       try { Optimize-Volume -DriveLetter $lettre -ReTrim -ErrorAction Stop; Ok "Retrim lancé sur $($lettre):"; $r++ } catch {}
     }
     if (-not $r) { Write-Host " - Aucun SSD à retrimer." }

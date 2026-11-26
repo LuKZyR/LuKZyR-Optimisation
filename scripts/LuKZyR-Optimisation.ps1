@@ -1,12 +1,12 @@
 param([switch]$TestAuto)
 # =====================================================================
-#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.16)  -  Tableau de bord
+#  LUKZYR OPTIMISATION v0.1 bêta (version interne 5.17)  -  Tableau de bord
 #  Détecte le matériel, propose les pilotes officiels, nettoie et optimise
 #  -TestAuto : (tests uniquement) active tout et applique sans confirmation
 # =====================================================================
 $VersionApp = "0.1"          # version publique (comparée au version.json des mises à jour)
-$VersionBeta = $true         # v0.1 bêta = version interne 5.16
-$VersionInterne = "5.16"   # comparé comme [version] : 5.16 > 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10
+$VersionBeta = $true         # v0.1 bêta = version interne 5.17
+$VersionInterne = "5.17"   # comparé comme [version] : 5.17 > 5.16 > 5.15 > 5.14 > 5.13 > 5.12 > 5.11 > 5.10
 # Mise à jour automatique : adresse d'un fichier version.json (voir LISEZ-MOI).
 # Vide = pas de serveur. Peut aussi être réglée dans C:\ProgramData\Lukzyr\config.json : { "urlMiseAJour": "https://..." }
 # v5.7 : le dépôt officiel (avant : adresse vide => « Aucun serveur de mise à jour configuré », rien n'était vérifié)
@@ -82,6 +82,7 @@ if (-not $env:LK_SIMU_RAPIDE) {
       L "mémoire" { Get-CimInstance Win32_PhysicalMemory }
       L "Windows" { Get-CimInstance Win32_OperatingSystem }
       L "disques" { Get-PhysicalDisk }
+      L "PC" { Get-CimInstance Win32_ComputerSystem | Select-Object -First 1 }
       , $r
     })
     $script:preLecture = @{ PS = $psPre; H = $psPre.BeginInvoke() }
@@ -1406,32 +1407,42 @@ function Lire-Wmi($quoi, [scriptblock]$code) {
   }
   try { $ErrorActionPreference = "Stop"; & $code } catch { $script:erreursDetection += "$(T $quoi) : $($_.Exception.Message)"; $null }
 }
+# v5.17 : typologie CPU / VM / RAM (fonctions de Guide-BIOS.ps1) disponible dès la détection
+try { . (Join-Path $dir "Guide-BIOS.ps1") } catch {}
 Etape-Chargement 20 30 "Détection du processeur..."
 $cpu   = Lire-Wmi "processeur" { Get-CimInstance Win32_Processor | Select-Object -First 1 }
+if (-not $cpu) { $cpu = [pscustomobject]@{ Name = ""; Manufacturer = ""; NumberOfCores = 0; NumberOfLogicalProcessors = 0; MaxClockSpeed = 0 } }
 Etape-Chargement 30 40 "Carte graphique..."
 $tousGpu = @(Lire-Wmi "carte graphique" { Get-CimInstance Win32_VideoController } | Where-Object { $_ })
-$gpus  = @($tousGpu | Where-Object { $_.Name -notmatch "Microsoft|Basic|Virtual|Remote|Parsec|Meta" })
+# Cartes dédiées / iGPU connus en premier ; les adaptateurs de base / virtuels servent de repli (plus de « GPU non détecté » à vide)
+$gpus  = @($tousGpu | Where-Object { $_.Name -notmatch '(?i)Microsoft Basic|Basic Display|Virtual Display|Remote Display|Parsec|Meta Quest|Indirect Display' })
 if (-not $gpus.Count) {
-  # Pas de pilote graphique installé : on identifie la marque par l'identifiant matériel
   foreach ($g in $tousGpu) {
     $nomG = if ($g.PNPDeviceID -match "VEN_1002") { "AMD Radeon (pilote non installé)" }
             elseif ($g.PNPDeviceID -match "VEN_10DE") { "NVIDIA GeForce (pilote non installé)" }
-            elseif ($g.PNPDeviceID -match "VEN_8086") { "Intel Graphics (pilote non installé)" } else { $null }
-    if ($nomG) { $gpus += [pscustomobject]@{ Name = $nomG; AdapterCompatibility = "" } }
+            elseif ($g.PNPDeviceID -match "VEN_8086") { "Intel Graphics (pilote non installé)" }
+            elseif ("$($g.Name)" -match '(?i)QEMU|Bochs|Virtio|Red Hat|Standard VGA|Microsoft Basic|Basic Display|Hyper-V Video|VMware SVGA') { "Carte d'affichage de base" }
+            elseif ("$($g.Name)") { "$($g.Name)" } else { $null }
+    if ($nomG) { $gpus += [pscustomobject]@{ Name = $nomG; AdapterCompatibility = "$($g.AdapterCompatibility)"; PNPDeviceID = "$($g.PNPDeviceID)"; DriverVersion = $g.DriverVersion; DriverDate = $g.DriverDate; AdapterRAM = $g.AdapterRAM } }
   }
 }
 # v5.3 : mémoire vidéo réelle (Win32_VideoController.AdapterRAM plafonne à 4 Go) : registre du pilote, qwMemorySize
 function Vram-Go($g) {
+  $lues = @()
   try {
     foreach ($k in @(Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\d{4}$' })) {
       $p = Get-ItemProperty $k.PSPath -ErrorAction SilentlyContinue
-      if ("$($p.DriverDesc)" -ne "$($g.Name)") { continue }
+      $desc = "$($p.DriverDesc)"
+      $ok = ($desc -eq "$($g.Name)") -or ($desc -and "$($g.Name)" -and ($desc.StartsWith("$($g.Name)".Substring(0, [math]::Min(12, "$($g.Name)".Length))) -or "$($g.Name)".StartsWith($desc.Substring(0, [math]::Min(12, $desc.Length)))))
+      if (-not $ok) { continue }
       $o = $p."HardwareInformation.qwMemorySize"
       if (-not $o) { $o = $p."HardwareInformation.MemorySize"; if ($o -is [byte[]]) { $o = [BitConverter]::ToUInt32($o, 0) } }
-      if ($o) { return [math]::Round([double]$o / 1GB) }
+      if ($o -and [double]$o -gt 0) { $lues += [double]$o }
     }
   } catch {}
-  if ($g.AdapterRAM -gt 0) { return [math]::Round([double]$g.AdapterRAM / 1GB) }
+  if ($lues.Count) { return [math]::Round(([double]($lues | Measure-Object -Maximum).Maximum) / 1GB) }
+  # AdapterRAM est un UInt32 : au-delà de 4 Go-1 il sature (0 ou 4294967295) — on l'ignore alors
+  if ($g.AdapterRAM -gt 0 -and [uint64]$g.AdapterRAM -lt 4294967295) { return [math]::Round([double]$g.AdapterRAM / 1GB) }
   return 0
 }
 foreach ($g in $gpus) { try { $g | Add-Member -NotePropertyName VramGo -NotePropertyValue (Vram-Go $g) -Force } catch {} }
@@ -1443,9 +1454,15 @@ $bios  = Lire-Wmi "BIOS" { Get-CimInstance Win32_BIOS }
 Etape-Chargement 47 54 "Mémoire..."
 $mems  = @(Lire-Wmi "mémoire" { Get-CimInstance Win32_PhysicalMemory } | Where-Object { $_ })
 $os    = Lire-Wmi "Windows" { Get-CimInstance Win32_OperatingSystem }
+$systeme = Lire-Wmi "PC" { Get-CimInstance Win32_ComputerSystem | Select-Object -First 1 }
 Etape-Chargement 54 62 "Disques..."
 $disks = @(Lire-Wmi "disques" { Get-PhysicalDisk } | Where-Object { $_ })
-$osVer = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").DisplayVersion
+$cvWin = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+$osVer = $cvWin.DisplayVersion
+$osNomDetect = ("$($os.Caption)" -replace '^Microsoft\s+','').Trim()
+$osLtsc = ("$osNomDetect $($cvWin.EditionID) $($cvWin.InstallationType)" -match '(?i)LTSC|LTSB|EnterpriseS|IoTEnterpriseS')
+$osHome = ("$($cvWin.EditionID)" -match '(?i)^Core|Home')
+$script:archiArm = ("$env:PROCESSOR_ARCHITECTURE" -eq "ARM64") -or ("$env:PROCESSOR_ARCHITEW6432" -eq "ARM64")
 # v5.6 : un onduleur (UPS) apparaît aussi comme « batterie » : PC portable = Windows le dit « mobile »,
 # ou vraie batterie dans un boîtier qui n'est pas un PC fixe
 $portable = [bool](Lire-Wmi "batterie" {
@@ -1462,22 +1479,35 @@ $deuxGpu = @($tousGpu | Where-Object { "$($_.PNPDeviceID)" -like 'PCI\*' }).Coun
 $buildWin = 0; try { $buildWin = [int](Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuild } catch {}
 
 $cpuNom = ("$($cpu.Name)" -replace '\s+',' ').Trim()
-$cpuMarque = if ($cpu.Manufacturer -match "AMD") { "AMD" } elseif ($cpu.Manufacturer -match "Intel") { "Intel" } else { "$($cpu.Manufacturer)" }
+$clsCpu = if (Get-Command Classer-Cpu -ErrorAction SilentlyContinue) { Classer-Cpu $cpu } else { $null }
+$script:virtuel = $false
+if (Get-Command Est-Virtuel -ErrorAction SilentlyContinue) {
+  $script:virtuel = Est-Virtuel ([pscustomobject]@{ Cpu = $cpu; Board = $board; Bios = $bios; Systeme = $systeme; Gpus = $tousGpu })
+}
+if ($clsCpu -and $clsCpu.Virtuel) { $script:virtuel = $true }
+if ($script:archiArm -and $clsCpu) { $clsCpu.Arm = $true; if (-not $clsCpu.Marque) { $clsCpu.Marque = "ARM" } }
+$cpuMarque = if ($clsCpu -and $clsCpu.Marque) { $clsCpu.Marque } elseif ($cpu.Manufacturer -match "Intel") { "Intel" } elseif ($cpu.Manufacturer -match "AMD") { "AMD" } else { "$($cpu.Manufacturer)" }
+# Conseils chipset / « Windows et Ryzen » : seulement un vrai processeur concerné, pas un CPU d'hyperviseur (QEMU TCG, etc.)
+$cpuRyzen = ($cpuMarque -eq "AMD" -and -not $script:virtuel -and $cpuNom -match '(?i)Ryzen|Threadripper|EPYC')
+$cpuIntelReel = ($cpuMarque -eq "Intel" -and -not $script:virtuel)
 $ramGo = [math]::Round((($mems | Measure-Object Capacity -Sum).Sum)/1GB)
 if (-not $ramGo) { $ramGo = [math]::Round($os.TotalVisibleMemorySize/1MB) }
-$ramType = switch (($mems | Select-Object -First 1).SMBIOSMemoryType) { 26 {"DDR4"} 34 {"DDR5"} 24 {"DDR3"} default {""} }
+$ramType = if (Get-Command Type-Ram -ErrorAction SilentlyContinue) { Type-Ram (($mems | Select-Object -First 1).SMBIOSMemoryType) } else { switch (($mems | Select-Object -First 1).SMBIOSMemoryType) { 26 {"DDR4"} 34 {"DDR5"} 24 {"DDR3"} default {""} } }
 $ramMhz = ($mems | Select-Object -First 1).ConfiguredClockSpeed
 if (-not $ramMhz) { $ramMhz = ($mems | Select-Object -First 1).Speed }
-$cmMarque = ("$($board.Manufacturer)" -replace 'Micro-Star International Co\., Ltd\.?','MSI' -replace 'ASUSTeK COMPUTER INC\.?','ASUS' -replace 'Gigabyte Technology Co\., Ltd\.?','Gigabyte').Trim()
+$ramSoudee = ((@($mems | Where-Object { $ff = 0; try { $ff = [int]$_.FormFactor } catch {}; ($ff -eq 13) -or ("$($_.BankLabel) $($_.DeviceLocator)" -match '(?i)solder|onboard|system board') }).Count -gt 0) -or ($ramType -match 'LPDDR'))
+$cmMarque = ("$($board.Manufacturer)" -replace 'Micro-Star International Co\., Ltd\.?','MSI' -replace 'ASUSTeK COMPUTER INC\.?','ASUS' -replace 'Gigabyte Technology Co\., Ltd\.?','Gigabyte' -replace 'Hewlett-Packard','HP' -replace 'Dell Inc\.?','Dell' -replace 'To [bB]e [fF]illed by O\.?E\.?M\.?','').Trim()
 $cmModele = "$($board.Product)".Trim()
 
 function Gpu-Marque($g) {
-  if ($g.Name -match "NVIDIA|GeForce|RTX|GTX|Quadro") { "NVIDIA" }
-  elseif ($g.Name -match "AMD|Radeon") { "AMD" }
-  elseif ($g.Name -match "Intel|Arc|UHD|Iris") { "Intel" }
+  $n = "$($g.Name) $($g.AdapterCompatibility) $($g.PNPDeviceID)"
+  if ($n -match '(?i)NVIDIA|GeForce|RTX|GTX|Quadro|TITAN|Tesla|VEN_10DE') { "NVIDIA" }
+  elseif ($n -match '(?i)Radeon|FirePro|Instinct|VEN_1002') { "AMD" }
+  elseif ($n -match '(?i)Arc\b|Iris|UHD|Xe Graphics|Intel|VEN_8086') { "Intel" }
   else { "$($g.AdapterCompatibility)" }
 }
 function Disque-Marque($d) {
+  if (Get-Command Marque-Disque -ErrorAction SilentlyContinue) { return (Marque-Disque "$($d.FriendlyName)") }
   $n = "$($d.FriendlyName)"
   if ($n -match "Samsung") {"Samsung"} elseif ($n -match "CT\d|Crucial|Micron") {"Crucial"} elseif ($n -match "WD|Western|SanDisk") {"WD"}
   elseif ($n -match "Kingston|SA400|SNV|KC\d") {"Kingston"} elseif ($n -match "Seagate|ST\d") {"Seagate"} else {""}
@@ -1497,9 +1527,9 @@ try {
 # ===================== PILOTES OFFICIELS =====================
 $pilotes = @()
 $enc = [uri]::EscapeDataString
-if ($cpuMarque -eq "AMD") {
+if ($cpuRyzen) {
   $pilotes += @{ Nom = "Pilotes chipset AMD"; Desc = "Ouvre la page officielle AMD (chipset Ryzen)."; Url = "https://www.amd.com/fr/support/download/drivers.html" }
-} elseif ($cpuMarque -eq "Intel") {
+} elseif ($cpuIntelReel) {
   $pilotes += @{ Nom = "Intel Driver & Support Assistant"; Desc = "Chipset, Wi-Fi, iGPU. Installé automatiquement depuis Intel (winget)."; Winget = "Intel.IntelDriverAndSupportAssistant"; Url = "https://www.intel.com/content/www/fr/fr/support/detect.html" }
 }
 foreach ($g in $gpus) {
@@ -1510,13 +1540,10 @@ foreach ($g in $gpus) {
                  $pilotes += @{ Nom = "Pilote graphique Intel"; Desc = ((T "Pour {0}. Installé automatiquement depuis Intel (winget).") -f $g.Name); Winget = "Intel.IntelDriverAndSupportAssistant"; Url = "https://www.intel.com/content/www/fr/fr/support/detect.html" } } }
   }
 }
-$q = $enc.Invoke("$cmModele")
-switch -Regex ($cmMarque) {
-  "MSI"      { $pilotes += @{ Nom = "Carte mère MSI $cmModele"; Desc = "BIOS, LAN, audio : page support officielle MSI."; Url = "https://www.msi.com/search/$q" } }
-  "ASUS"     { $pilotes += @{ Nom = "Carte mère ASUS $cmModele"; Desc = "BIOS, LAN, audio : page support officielle ASUS."; Url = "https://www.asus.com/fr/searchresult?searchType=support&searchKey=$q" } }
-  "Gigabyte" { $pilotes += @{ Nom = "Carte mère Gigabyte $cmModele"; Desc = "BIOS, LAN, audio : page support officielle Gigabyte."; Url = "https://www.gigabyte.com/fr/Search?kw=$q" } }
-  "ASRock"   { $pilotes += @{ Nom = "Carte mère ASRock $cmModele"; Desc = "BIOS, LAN, audio : page support officielle ASRock."; Url = "https://www.asrock.com/search/index.fr.asp?Keyword=$q" } }
-  default    { if ("$cmMarque$cmModele") { $pilotes += @{ Nom = "Carte mère / PC $cmMarque $cmModele".Trim(); Desc = "Recherche la page support du fabricant."; Url = "https://www.google.com/search?q=" + $enc.Invoke("$cmMarque $cmModele drivers support officiel") } } }
+if (-not $script:virtuel) {
+  $nomCm = if ($profilBios -and $profilBios.Nom -and $profilBios.Nom -ne "carte mère non identifiée") { $profilBios.Nom } else { "$cmMarque $cmModele".Trim() }
+  $urlCm = if ($profilBios -and $profilBios.UrlSupport) { $profilBios.UrlSupport } else { "https://www.google.com/search?q=" + $enc.Invoke("$cmMarque $cmModele drivers support officiel") }
+  if ($nomCm) { $pilotes += @{ Nom = "Carte mère / PC $nomCm"; Desc = "BIOS, LAN, audio : page support officielle du fabricant."; Url = $urlCm } }
 }
 $vus = @{}
 foreach ($d in $disks) {
@@ -1528,6 +1555,11 @@ foreach ($d in $disks) {
     "WD"       { $pilotes += @{ Nom = "WD Dashboard"; Desc = "Firmware des SSD WD / SanDisk (page officielle)."; Url = "https://support-en.wd.com/app/products/downloads/softwaredownloads" } }
     "Kingston" { $pilotes += @{ Nom = "Kingston SSD Manager"; Desc = "Firmware des SSD Kingston. Installé automatiquement (winget)."; Winget = "Kingston.SSDManager"; Url = "https://www.kingston.com/fr/support/technical/ssdmanager" } }
     "Seagate"  { $pilotes += @{ Nom = "Seagate SeaTools"; Desc = "Diagnostic des disques Seagate (page officielle)."; Url = "https://www.seagate.com/fr/fr/support/downloads/seatools/" } }
+    "Kioxia"   { $pilotes += @{ Nom = "Kioxia / Toshiba Storage"; Desc = "Outils et firmware des SSD Kioxia / Toshiba (page officielle)."; Url = "https://www.kioxia.com/en-jp/support.html" } }
+    "SK Hynix" { $pilotes += @{ Nom = "SK Hynix / Solidigm"; Desc = "Outils et firmware des SSD SK Hynix / Solidigm (page officielle)."; Url = "https://www.solidigm.com/support.html" } }
+    "ADATA"    { $pilotes += @{ Nom = "ADATA / XPG"; Desc = "Outils et firmware des SSD ADATA / XPG (page officielle)."; Url = "https://www.adata.com/support/" } }
+    "Corsair"  { $pilotes += @{ Nom = "Corsair SSD Toolbox"; Desc = "Outils et firmware des SSD Corsair (page officielle)."; Url = "https://www.corsair.com/support" } }
+    "Lexar"    { $pilotes += @{ Nom = "Lexar DiskMaster"; Desc = "Outils des SSD Lexar (page officielle)."; Url = "https://www.lexar.com/support/" } }
   }
 }
 $volC = Get-Volume -DriveLetter ($env:SystemDrive.Substring(0,1))
@@ -2183,6 +2215,16 @@ function Placer-Optims($pageCle, $grille) {
   $sect = $null
   foreach ($o in @($optims | Where-Object { $_[5] -eq $pageCle })) {
     if ($o[6] -ne $sect) { $sect = $o[6]; if ($pageCle -ne "nettoyage" -or $sect -ne "CONFIDENTIALITÉ") { G-Section $grille $sect } }
+    if ($o[0] -eq "CachesShaders") {
+      G-Fin $grille
+      $swC = Ligne $grille.Page $grille.Y $o[1] $o[2] $o[3] $null "optim:$($o[0])" -X 0 -W 920 -Badge $o[4]
+      $bC = Bouton $swC.Parent "Nettoyer" 690 13 148 36 -Principal
+      $bC.Add_Click({ Nettoyer-CachesMaintenant })
+      $descC = @($swC.Parent.Controls | Where-Object { $_ -is [Windows.Forms.Label] -and $_.Top -ge (S 28) }) | Select-Object -First 1
+      if ($descC) { $descC.Width = S 660 }
+      $grille.Y += 84
+      continue
+    }
     [void](G-Option $grille $o[1] $o[2] $o[4] $o[3] "optim:$($o[0])")
   }
   G-Fin $grille
@@ -2229,13 +2271,7 @@ Ligne-Verif "anim" 0xE74D "Effets d'animation de Windows" "Lecture..." "Ouvrir" 
 # Outil Windows (pas un réglage) : Nettoyage de disque
 $oCleanmgr = LigneOption $pN $gN.Y 0xEA99 "Nettoyage de disque Windows" "Ouvre l'outil Windows pour vider la corbeille, les anciennes mises à jour, etc."
 foreach ($el in $oCleanmgr.Elements) { $el.Add_Click({ Start-Process cleanmgr }) }
-# v5.16 : même nettoyage de caches, tout de suite (sans passer par APPLIQUER)
-$gN.Y += 70
-$oCaches = LigneOption $pN $gN.Y 0xEA99 "Nettoyage des caches shaders et miniatures" "Vide les caches de shaders et les miniatures de l'Explorateur. Les premiers lancements de jeu peuvent recompiler les shaders (un court gel)." -Badge "n"
-$bCaches = Bouton $oCaches.Carte "Nettoyer" 756 13 148 36 -Principal
-$bCaches.Add_Click({ Nettoyer-CachesMaintenant })
-foreach ($el in $oCaches.Elements) { $el.Add_Click({ Nettoyer-CachesMaintenant }) }
-$gN.Y += 70
+# v5.17 : le bouton « Nettoyer » est sur la carte pleine largeur de l'option (visible sans défiler sur un petit écran)
 
 # ===================== PERFORMANCE > SESSION DE JEU (v5.7) =====================
 # Ferme des applis d'arrière-plan pendant qu'on joue, puis les relance. Rien n'est désinstallé, aucun
@@ -3121,7 +3157,8 @@ $codeDiagnostic = {
 }
 function Vars-Diagnostic {
   $ded = @($tousGpu | Where-Object { "$($_.PNPDeviceID)" -match 'VEN_10DE' -or ("$($_.PNPDeviceID)" -match 'VEN_1002' -and "$($_.Name)" -match '\bRX\s?\d|Radeon Pro|FirePro|Radeon VII|\bR9\s|\bR7\s\d') } | ForEach-Object { [pscustomobject]@{ Id = "$($_.PNPDeviceID)"; Nom = "$($_.Name)" } })
-  @{ cheminSauvegarde = (Join-Path $dir "Sauvegarde-Reglages.ps1"); cpuAmd = ($cpuMarque -eq "AMD"); cpuNom = $cpuNom; coeurs = [int]$cpu.NumberOfCores; gpusDedies = $ded }
+  $nCoeurs = 0; try { $nCoeurs = [int]$cpu.NumberOfCores } catch {}
+  @{ cheminSauvegarde = (Join-Path $dir "Sauvegarde-Reglages.ps1"); cpuAmd = [bool]$cpuRyzen; cpuNom = $cpuNom; coeurs = $nCoeurs; gpusDedies = $ded }
 }
 function Item-Diag($titre, $etat, $statut, $detail, $conseil = "", $bouton = "", $action = $null) { [pscustomobject]@{ Titre = $titre; Etat = $etat; Statut = $statut; Detail = $detail; Conseil = $conseil; Bouton = $bouton; Action = $action } }
 $actionAmd = { Start-Process "https://www.amd.com/fr/support/download/drivers.html" }
@@ -3133,7 +3170,8 @@ function Items-Diagnostic($r) {
   if ($m -and $m.Barrettes) {
     $can = @($m.Canaux); $tit = T "Mémoire en dual channel"
     if ($m.Barrettes -eq 1) {
-      if ($portable) { [void]$l.Add((Item-Diag $tit "info" (T "1 module détecté") ((T "{0} Go sur un seul module détecté.") -f $m.Go) "Sur un portable, une partie de la mémoire peut être soudée : vérifie la fiche technique avant d'ajouter une barrette.")) }
+      if ($script:virtuel) { [void]$l.Add((Item-Diag $tit "info" (T "1 module détecté") ((T "{0} Go sur un seul module (machine virtuelle) : normal, rien à ajouter.") -f $m.Go))) }
+      elseif ($ramSoudee -or $portable) { [void]$l.Add((Item-Diag $tit "info" (T "1 module détecté") ((T "{0} Go sur un seul module détecté.") -f $m.Go) $(if ($ramSoudee) { "Mémoire soudée (souvent LPDDR) : on ne peut généralement pas ajouter de barrette." } else { "Sur un portable, une partie de la mémoire peut être soudée : vérifie la fiche technique avant d'ajouter une barrette." }))) }
       else { [void]$l.Add((Item-Diag $tit "alerte" (T "Single channel") ((T "Une seule barrette ({0} Go) : la mémoire n'utilise qu'un canal, débit divisé par deux.") -f $m.Go) "Ajoute une 2e barrette identique (même taille, même vitesse) : gain net en jeu.")) }
     } elseif ($can.Count -ge 2) { [void]$l.Add((Item-Diag $tit "ok" (T "Dual channel") ((T "{0} barrettes sur les canaux {1} ({2} Go).") -f $m.Barrettes, ($can -join ", "), $m.Go))) }
     elseif ($can.Count -eq 1) { [void]$l.Add((Item-Diag $tit "alerte" (T "Même canal") ((T "{0} barrettes, toutes sur le canal {1} : la mémoire n'utilise qu'un canal.") -f $m.Barrettes, $can[0]) "PC éteint : place-les dans les emplacements conseillés par le manuel de la carte mère (souvent A2 et B2, les 2e et 4e en partant du processeur)." "Guide BIOS" { Afficher "bios" })) }
@@ -3170,13 +3208,13 @@ function Items-Diagnostic($r) {
     else { [void]$l.Add((Item-Diag $tit "alerte" (T "À corriger") ($manque -join " · ") "Installe le dernier pilote chipset AMD, laisse le Mode Jeu activé et la Xbox Game Bar installée (même sans l'utiliser). BIOS : « CPPC Dynamic Preferred Cores » sur Driver ou Auto." "Site AMD" $actionAmd)) }
   }
   $w = $r.Windows
-  if ($w -and $cpuMarque -eq "AMD" -and $w.Build) {
+  if ($w -and $cpuRyzen -and $w.Build) {
     $tit = T "Windows et Ryzen"; $bu = "$($w.Build).$($w.Ubr)"
     if ($w.Build -ge 26100) { [void]$l.Add((Item-Diag $tit "ok" (T "À jour") ((T "Windows 11 {0} (build {1}) : optimisation Ryzen incluse.") -f $w.Version, $bu))) }
     elseif ($w.Build -ge 22621 -and $w.Ubr -ge 4112) { [void]$l.Add((Item-Diag $tit "ok" (T "À jour") ((T "Windows 11 {0} (build {1}) avec la mise à jour d'août 2024 : optimisation Ryzen incluse.") -f $w.Version, $bu))) }
     elseif ($w.Build -ge 22621) { [void]$l.Add((Item-Diag $tit "alerte" (T "Mise à jour à installer") ((T "Windows 11 {0} (build {1}) sans la mise à jour d'août 2024 (KB5041587) qui accélère les Ryzen.") -f $w.Version, $bu) "Paramètres > Windows Update : installe les mises à jour, ou passe à Windows 11 24H2." "Windows Update" $actionWU)) }
     elseif ($w.Build -ge 22000) { [void]$l.Add((Item-Diag $tit "alerte" (T "Trop ancien") ((T "Windows 11 21H2 (build {0}) : plus mis à jour, sans l'optimisation Ryzen.") -f $bu) "Paramètres > Windows Update : passe à la dernière version de Windows 11." "Windows Update" $actionWU)) }
-    else { [void]$l.Add((Item-Diag $tit "alerte" (T "Windows 10") ((T "Windows 10 (build {0}) : pas d'optimisation Ryzen récente, plus suivi depuis octobre 2025.") -f $bu) "Passe à Windows 11 si ton PC est compatible (Paramètres > Windows Update)." "Windows Update" $actionWU)) }
+    else { [void]$l.Add((Item-Diag $tit "alerte" (T "Windows 10") ((T "Windows 10 (build {0}) : pas d'optimisation Ryzen récente, plus suivi depuis octobre 2025.") -f $bu) $(if ($osLtsc) { "Édition LTSC : l'optimisation Ryzen récente est dans Windows 11. La mise à niveau n'est pas proposée de la même façon que sur une édition standard." } else { "Passe à Windows 11 si ton PC est compatible (Paramètres > Windows Update)." }) $(if ($osLtsc) { "" } else { "Windows Update" }) $(if ($osLtsc) { $null } else { $actionWU }))) }
   }
   $j = $r.Jeux
   if ($j -and $j.Total) {
@@ -3188,7 +3226,7 @@ function Items-Diagnostic($r) {
   }
   # 7. Écran à fréquence variable : limite d'images/s conseillée (Hz - 3, ou environ 3 % sous la fréquence au-delà de 240 Hz)
   $hz = 0; try { $fr = [LkNative]::Frequences(); if ($fr) { $hz = [int]$fr[0] } } catch {}
-  if ($hz -gt 60) {
+  if ($hz -gt 60 -and -not $script:virtuel -and ($gpus.Count -and (Gpu-Marque $gpus[0]) -match 'NVIDIA|AMD|Intel')) {
     $cap = if ($hz -le 240) { $hz - 3 } else { [int][math]::Floor($hz * 0.97) }
     $marque = "$(@($gpus)[0].Name)"
     $cons = if ($marque -match 'NVIDIA|GeForce|RTX|GTX') { (T "Panneau de configuration NVIDIA : G-SYNC activé et synchronisation verticale activée ; dans le jeu : V-Sync coupé, limite à {0} images/s.") -f $cap }
@@ -3909,7 +3947,7 @@ function Chemin-Winget {
   if ($c -and $c.Source -and (Test-Path $c.Source)) { return $c.Source }
   $alias = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\winget.exe"
   if (Test-Path $alias) { return $alias }
-  $d = Get-ChildItem "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe\winget.exe" -ErrorAction SilentlyContinue | Sort-Object { try { [version](($_.Directory.Name -split '_')[1]) } catch { [version]"0.0" } } -Descending | Select-Object -First 1
+  $d = Get-ChildItem "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*_*__8wekyb3d8bbwe\winget.exe" -ErrorAction SilentlyContinue | Sort-Object { try { [version](($_.Directory.Name -split '_')[1]) } catch { [version]"0.0" } } -Descending | Select-Object -First 1
   if ($d) { return $d.FullName }
   return $null
 }
@@ -4101,7 +4139,7 @@ function Afficher-Resume($duree) {
   $n = $script:resume.Count
   # v5.6 : « point de restauration créé » seulement s'il l'a vraiment été
   $sousT = if ($script:arrete) { T "Le point de restauration n'a pas pu être créé : tu as choisi de tout arrêter." }
-    elseif ($script:sansPoint) { ((T "{0} élément(s) installé(s) en {1} min.") -f $n, $duree) }
+    elseif ($script:sansPoint) { ((T "{0} élément(s) traité(s) en {1} min.") -f $n, $duree) }
     elseif ($resto) { ((T "{0} valeur(s) d'origine remise(s) en {1} min.") -f $n, $duree) }
     elseif ($script:pointOk -and $script:pointReutilise) { ((T "{0} réglage(s) appliqué(s) en {1} min · point de restauration récent réutilisé (créé il y a moins de 10 min).") -f $n, $duree) }
     elseif ($script:pointOk) { ((T "{0} réglage(s) appliqué(s) en {1} min · point de restauration créé.") -f $n, $duree) }
@@ -4623,7 +4661,7 @@ $tAlertes = New-Object Windows.Forms.Timer; $tAlertes.Interval = 400
 $tAlertes.Add_Tick({ $tAlertes.Stop(); try { Maj-Alertes } catch { Log "Alertes : $($_.Exception.Message)" }; try { Maj-Score } catch { Log "Score : $($_.Exception.Message)" } })
 $f.Add_Shown({ $tAlertes.Start() })
 MajCompteur
-Log "LuKZyR Optimisation $(Version-Affichee) (build $VersionInterne) - matériel détecté : $cpuNom / $(if ($gpuNom) { $gpuNom } else { 'GPU non détecté' })"
+Log "LuKZyR Optimisation $(Version-Affichee) (build $VersionInterne) - matériel détecté : $(if ($cpuNom) { $cpuNom } else { 'CPU non détecté' }) / $(if ($gpuNom) { $gpuNom } else { if ($tousGpu.Count) { 'Carte d''affichage de base' } else { 'GPU non détecté' } })$(if ($script:virtuel) { ' (PC virtuel)' })$(if ($script:archiArm) { ' (ARM64)' })"
 Log ("Écran de chargement : " + $(if ($script:modeChargement) { $script:modeChargement } else { "aucun" }) + $(if ($script:erreurChargement) { " ($($script:erreurChargement))" } else { "" }))
 foreach ($x in $script:erreursDetection) { Log ("/!\ " + (T "Détection incomplète (l'appli reste utilisable)") + " - $x") }
 # v5.1 : rouvre la dernière page et à la même position (si elle est toujours sur un écran)
