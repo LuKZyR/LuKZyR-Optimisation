@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.16",
+  "build": "5.17",
   "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.16) : Nettoyage des caches shaders et miniatures (DirectX, NVIDIA, AMD, Intel, et caches d'icônes / miniatures de l'Explorateur). Décoché par défaut, non annulable (c'est un cache). Les premiers lancements de jeu peuvent recompiler les shaders. Bouton « Nettoyer » sur la page Nettoyage, ou via APPLIQUER.",
-  "sha256": "1eb05d18e4a7066de3e7621ff9cdbc2a7853ff3e04e77e9b15eac201c2833b99"
+  "notes": "v0.1 bêta (build 5.17) : détection matériel élargie (Intel hybride et Core Ultra, Ryzen / X3D / Threadripper / APU, GPU NVIDIA AMD Intel, VRAM > 4 Go, RAM soudée, disques NVMe/SATA/HDD/USB, cartes mères et PC de marque, machines virtuelles, ARM64). Correctifs du bouton Nettoyer et du résumé « traité(s) ».",
+  "sha256": "67e7d1da1452ef6bcb4a83b931a1d22f080405882aff01abc6e0a65e7a349f03"
 }
