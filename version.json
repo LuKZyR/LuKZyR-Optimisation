@@ -1,7 +1,7 @@
 {
   "version": "0.2 bêta",
-  "build": "6.0",
-  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/cca1440c59e2d331f96cb778530aabcb1ef7f457/downloads/LuKZyR-Optimisation-v0.2-beta-build-6.0.zip",
-  "notes": "Nouvel écran de démarrage dans le lanceur et la DLL. Transitions plus courtes et animations réduites respectées. Deux options visuelles Windows réversibles. Corrections du journal et de la vérification des mises à jour.",
-  "sha256": "c7fde616b3b7f2f1dfb2a21b36ce6b5b8d3a390a94a2dcefb238e313153edd52"
+  "build": "6.1",
+  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/a0d1e883c611d2988af0e3ef5d52c4ee14bf79c7/downloads/LuKZyR-Optimisation-v0.2-beta-build-6.1.zip",
+  "notes": "Relais du lanceur au premier rendu de la DLL, temps écoulé et indication des étapes longues. Recherche agrandie avec bouton d’effacement, résultats classés par pertinence, rubriques et navigation au clavier.",
+  "sha256": "519cc9ce8ca93f2ce41507de3b8a102914dfe5093a7312dec833a0dc0f21e3c5"
 }

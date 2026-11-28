@@ -16,6 +16,18 @@ annulable en un clic avec **« Tout annuler »**.
 
 ## Journal des mises à jour
 
+### v0.2 bêta · build 6.1
+
+- Le lanceur cède la place une fois la première image de la DLL dessinée.
+  Les deux fenêtres s’affichent au même endroit quand l’écran le permet.
+  Le temps écoulé reste continu et une étape longue est signalée.
+- Le champ de recherche a été agrandi. Il affiche **Ctrl+F** quand il est vide
+  et un bouton d’effacement pendant la saisie.
+- Le panneau de résultats affiche le nombre de correspondances et leur
+  rubrique. Il inclut des commandes comme **Rapport système** et des
+  paramètres comme **Animations réduites**. Utilise **↑** et **↓** pour
+  sélectionner un résultat, **Entrée** pour l’ouvrir et **Échap** pour fermer.
+
 ### v0.2 bêta · build 6.0
 
 - Le lanceur et la DLL partagent le nouvel écran de chargement. La barre suit
@@ -183,7 +195,7 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le [ZIP de la v0.2 bêta, build 6.0](downloads/LuKZyR-Optimisation-v0.2-beta-build-6.0.zip?raw=true)
+1. Télécharge le [ZIP de la v0.2 bêta, build 6.1](downloads/LuKZyR-Optimisation-v0.2-beta-build-6.1.zip?raw=true)
    et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.
