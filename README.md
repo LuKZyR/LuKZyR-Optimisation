@@ -16,6 +16,18 @@ annulable en un clic avec **« Tout annuler »**.
 
 ## Journal des mises à jour
 
+### Build 5.22
+
+- Le moteur passe à la tâche suivante dès que ses deux flux de sortie sont fermés.
+  Le journal traite les lignes par lots et chaque instance écrit dans son propre fichier.
+- La recherche dans les réglages réutilise les titres indexés et interprète
+  les caractères `*` et `?` tels qu’ils sont saisis.
+- L’application vérifie le nom et le numéro de séquence du nouveau point de
+  restauration. Elle rétablit la fréquence d’origine même si la création échoue
+  et interrompt l’opération si Windows refuse de la rétablir.
+- Les réparations préparent un fichier distinct pour chaque sélection au moment
+  du lancement. Un fichier manquant est signalé comme erreur.
+
 ### Build 5.21
 
 - Le bouton **Nettoyer** des caches de shaders et de miniatures est aligné sur
@@ -131,7 +143,7 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le [ZIP du build 5.21](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.21.zip?raw=true)
+1. Télécharge le [ZIP du build 5.22](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.22.zip?raw=true)
    et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.

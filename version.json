@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.21",
-  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/ece3df086592e3e2043090e4e1c8a028a5c69b9b/downloads/LuKZyR-Optimisation-v0.1-beta-build-5.21.zip",
-  "notes": "Le bouton Nettoyer des caches est centré sur son interrupteur. Performance rouvre toujours les réglages après un passage dans Session de jeu. Les 24 réglages sont regroupés par usage. L’Optimisation de la distribution se trouve dans Système > Réseau et VBS dans Système > Réparation et sécurité.",
-  "sha256": "97b3ee25a78025037e12c1b9a07398aaccc98603a0661c3a2967a405a185454e"
+  "build": "5.22",
+  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/9944e2bada1c055ab3d35b910fd537106aa66dd5/downloads/LuKZyR-Optimisation-v0.1-beta-build-5.22.zip",
+  "notes": "Tâches enchaînées plus vite et journal traité par lots. Recherche corrigée pour les caractères spéciaux. Les points de restauration sont vérifiés et leur fréquence d’origine est rétablie après la tentative. Les sélections de réparation sont isolées par exécution.",
+  "sha256": "7d8bd76fad236932d9587b8f32520496e43da77da9219fc0303c7f04e42ad890"
 }
