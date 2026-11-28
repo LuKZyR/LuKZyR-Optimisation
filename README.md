@@ -3,18 +3,33 @@
 </p>
 
 <h1 align="center">LuKZyR Optimisation</h1>
-<p align="center">v0.1 bêta · Windows 10 / 11</p>
+<p align="center">v0.2 bêta · Windows 10 / 11</p>
 
 LuKZyR Optimisation est une petite application Windows (PowerShell 5.1 + WinForms, sans
 installation) qui rend un PC de jeu plus réactif **sans casser Windows** : chaque réglage
 est expliqué, marqué **SÛR / AVANCÉ / DÉFINITIF**, sauvegardé avant modification et
 annulable en un clic avec **« Tout annuler »**.
 
-> **Statut : v0.1 bêta.** Testée, mais encore sur peu de PC différents. En cas de souci :
+> **Statut : v0.2 bêta.** Testée, mais encore sur peu de PC différents. En cas de souci :
 > Journal > « Exporter le journal », puis signale-le sur le
 > [serveur Discord](https://discord.gg/2RrjqvC5vv) avec le fichier.
 
 ## Journal des mises à jour
+
+### v0.2 bêta · build 6.0
+
+- Le lanceur et la DLL partagent le nouvel écran de chargement. La barre suit
+  les étapes réelles et chaque lancement attend son propre signal. L’écran
+  respecte les animations réduites et libère ses ressources à la fermeture.
+- Les transitions de page sont plus courtes. Un réglage qui désactive les
+  animations termine immédiatement les effets en cours.
+- **Performance → Effets visuels de Windows** propose deux options décochées
+  par défaut pour réduire les animations des fenêtres et de la barre des
+  tâches. Les réglages sont propres au compte, réversibles avec **Tout annuler**
+  et prennent effet à la prochaine connexion.
+- Le journal distingue les refus d’écriture de la transparence et de
+  l’Assistant de stockage. La vérification des mises à jour préserve une
+  version finale si le serveur propose une bêta du même numéro.
 
 ### Build 5.24
 
@@ -168,7 +183,7 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le [ZIP du build 5.24](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.24.zip?raw=true)
+1. Télécharge le [ZIP de la v0.2 bêta, build 6.0](downloads/LuKZyR-Optimisation-v0.2-beta-build-6.0.zip?raw=true)
    et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.

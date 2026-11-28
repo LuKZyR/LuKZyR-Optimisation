@@ -1,7 +1,7 @@
 {
-  "version": "0.1 bêta",
-  "build": "5.24",
-  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/51fd5f25770b31e5999319a8abce720692744852/downloads/LuKZyR-Optimisation-v0.1-beta-build-5.24.zip",
-  "notes": "Bilan compact avec durée réelle et accès direct au journal. Le nettoyage des caches ne propose plus de redémarrage. Nouveau rapport système avec synthèse du matériel, sommaire cliquable et version imprimable.",
-  "sha256": "beb4f71ba83c8bcbf63a8f30cebcd9ffcfa207e3811225835cd9d4fc639a3a74"
+  "version": "0.2 bêta",
+  "build": "6.0",
+  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/cca1440c59e2d331f96cb778530aabcb1ef7f457/downloads/LuKZyR-Optimisation-v0.2-beta-build-6.0.zip",
+  "notes": "Nouvel écran de démarrage dans le lanceur et la DLL. Transitions plus courtes et animations réduites respectées. Deux options visuelles Windows réversibles. Corrections du journal et de la vérification des mises à jour.",
+  "sha256": "c7fde616b3b7f2f1dfb2a21b36ce6b5b8d3a390a94a2dcefb238e313153edd52"
 }
