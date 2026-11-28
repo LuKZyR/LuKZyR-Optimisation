@@ -16,6 +16,18 @@ annulable en un clic avec **« Tout annuler »**.
 
 ## Journal des mises à jour
 
+### Build 5.23
+
+- Les badges **Sûr**, **Avancé**, **Non réversible** et **Définitif** ont des
+  pictogrammes distincts, un libellé plus lisible et des couleurs propres à
+  chaque thème.
+- La navigation met en évidence la section active. Son icône est reprise dans
+  l’en-tête, et le contraste des cartes, des onglets et de la barre d’action
+  a été renforcé en mode clair et sombre.
+- Les interrupteurs actifs affichent une coche. Tab, Espace et Entrée
+  permettent de parcourir et d’activer les boutons, les onglets et les
+  interrupteurs, avec un contour visible au clavier.
+
 ### Build 5.22
 
 - Le moteur passe à la tâche suivante dès que ses deux flux de sortie sont fermés.
@@ -77,7 +89,7 @@ annulable en un clic avec **« Tout annuler »**.
 ## Nouveautés
 
 - **Nouvelle interface avec barre latérale** : logo, recherche (Ctrl+F) dans tous les
-  réglages, une icône par section, encadré « Tout est annulable » avec le bouton
+  réglages, une icône par section, encadré « Sauvegarde des réglages » avec le bouton
   « Tout annuler » toujours à portée de main.
 - **Tableau de bord refait** : état du PC, **score d'optimisation** sur 100 (calculé
   uniquement avec ce qui est lu sur ton PC, sans rien modifier, détail point par point),
@@ -143,7 +155,7 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le [ZIP du build 5.22](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.22.zip?raw=true)
+1. Télécharge le [ZIP du build 5.23](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.23.zip?raw=true)
    et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.
