@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.23",
-  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/808b8de40b433df203484b6b80ec4066d381fa54/downloads/LuKZyR-Optimisation-v0.1-beta-build-5.23.zip",
-  "notes": "Badges Sûr, Avancé, Non réversible et Définitif redessinés. Contraste renforcé dans les deux thèmes, navigation active plus visible et coche sur les interrupteurs actifs. Boutons, onglets et interrupteurs utilisables au clavier.",
-  "sha256": "07500c6166ffee57dc73b5dc91096ebc9778357f9f731faef1b188f4495c690a"
+  "build": "5.24",
+  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/51fd5f25770b31e5999319a8abce720692744852/downloads/LuKZyR-Optimisation-v0.1-beta-build-5.24.zip",
+  "notes": "Bilan compact avec durée réelle et accès direct au journal. Le nettoyage des caches ne propose plus de redémarrage. Nouveau rapport système avec synthèse du matériel, sommaire cliquable et version imprimable.",
+  "sha256": "beb4f71ba83c8bcbf63a8f30cebcd9ffcfa207e3811225835cd9d4fc639a3a74"
 }

@@ -16,6 +16,19 @@ annulable en un clic avec **« Tout annuler »**.
 
 ## Journal des mises à jour
 
+### Build 5.24
+
+- La fenêtre de fin d’opération s’ajuste à la liste. Les longues listes défilent,
+  la durée s’affiche en secondes pour les opérations courtes et le journal
+  devient l’action principale en cas d’échec.
+- Le nettoyage direct des caches se termine avec **Fermer**. Les redémarrages
+  proposés pour les autres opérations demandent confirmation.
+- Le rapport système HTML s’ouvre sur une synthèse du matériel et propose un
+  sommaire cliquable, des sections adaptées aux petits écrans et une mise en
+  page d’impression. Le rapport texte est toujours exporté.
+- Les barrettes de mémoire sont distinguées même si Windows leur donne le
+  même nom d’emplacement.
+
 ### Build 5.23
 
 - Les badges **Sûr**, **Avancé**, **Non réversible** et **Définitif** ont des
@@ -155,7 +168,7 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le [ZIP du build 5.23](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.23.zip?raw=true)
+1. Télécharge le [ZIP du build 5.24](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.24.zip?raw=true)
    et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.
