@@ -14,6 +14,42 @@ annulable en un clic avec **« Tout annuler »**.
 > Journal > « Exporter le journal », puis signale-le sur le
 > [serveur Discord](https://discord.gg/2RrjqvC5vv) avec le fichier.
 
+## Journal des mises à jour
+
+### Build 5.21
+
+- Le bouton **Nettoyer** des caches de shaders et de miniatures est aligné sur
+  son interrupteur, avec des marges qui suivent l’échelle d’affichage.
+- **Performance** ouvre la page **Réglages** même après un passage dans
+  **Session de jeu**.
+- Les 24 réglages sont regroupés par usage. **Nettoyage** sépare les fichiers et
+  caches, l’entretien de Windows, les applications et la confidentialité.
+  **Optimisation de la distribution** se trouve dans **Système → Réseau**.
+  **VBS / intégrité de la mémoire** se trouve dans **Système → Réparation et sécurité**.
+
+### Build 5.20
+
+- Une sauvegarde modifiée depuis sa lecture est protégée contre l’écrasement.
+- **Tout annuler** conserve les données nécessaires pour réessayer si Windows refuse
+  de restaurer le plan d’alimentation ou de supprimer le plan temporaire.
+- L’échec d’ouverture d’une page de pilote est signalé dans le journal.
+
+### Build 5.19
+
+- Ajout d’une option à confirmer dans **Nettoyage** pour désinstaller les éditions
+  reconnues de McAfee, Norton et ExpressVPN. Elle est décochée par défaut.
+
+### Build 5.18
+
+- Les échecs du point de restauration et de la sauvegarde préalable sont signalés.
+  Le mode console enregistre les réglages réversibles avant leur modification.
+- **Tout annuler** restaure le type de démarrage et l’état des services lorsque
+  ces données existent dans la sauvegarde.
+- Un JSON illisible bloque l’opération. Le remplacement de la sauvegarde conserve
+  la version précédente dans un fichier `.bak`.
+- La session de jeu conserve son état si le plan d’alimentation ne peut être
+  rétabli. Le téléchargement d’une mise à jour vérifie le format du ZIP.
+
 ## Aperçu
 
 <p align="center">
@@ -53,19 +89,20 @@ annulable en un clic avec **« Tout annuler »**.
   accélération, optimisations des jeux en fenêtre, optimisations VRR, plan d'alimentation
   (*Utilisation normale*, conseillé pour Ryzen, ou *Performances élevées*, gain honnête de
   0 à 2 %), mode *Meilleures performances* de Windows 11, carte graphique puissante pour
-  les jeux (PC à 2 cartes), hibernation (jamais sur un PC avec batterie), VBS (avancé),
+  les jeux (PC à 2 cartes), hibernation (jamais sur un PC avec batterie),
   transparence, applis de démarrage sans délai, Edge sans préchargement, applis du Store
   en arrière-plan (optionnel).
 - **Vérifications (lecture seule)** : fréquence de l'écran, Resizable BAR / Smart Access
   Memory, Radeon Anti-Lag, Ne pas déranger en jeu, indexation de la recherche, effets
   d'animation de Windows, chacune avec un bouton vers le bon réglage.
-- **Nettoyage** : débloat (publicités, suggestions), télémétrie réduite, Copilot, OneDrive,
-  partage des mises à jour, fichiers temporaires, assistant de stockage, nettoyage des
-  composants Windows (WinSxS, **jamais** `/ResetBase`).
+- **Nettoyage** : fichiers temporaires, caches, assistant de stockage, entretien de
+  Windows (WinSxS, **jamais** `/ResetBase`), applications préinstallées, antivirus
+  et VPN tiers, télémétrie.
 - **Applications** : installation depuis les sources officielles (winget) : Steam, Epic
   Games, Ubisoft Connect, Discord, Spotify, Brave, OBS Studio, 7-Zip, VLC…
-- **Système** : applis au démarrage, DNS (Automatique, Cloudflare, Google, Quad9), espace
-  disque, TRIM, Optimiser les lecteurs, réparation DISM + SFC, Restaurer le système.
+- **Système** : applis au démarrage, DNS et partage des mises à jour dans **Réseau**,
+  espace disque, TRIM, Optimiser les lecteurs, VBS (avancé), réparation DISM + SFC,
+  Restaurer le système.
 - **Réparer** : remet à la valeur de Windows les réglages nuisibles laissés par d'autres
   « optimiseurs » (démarrage forcé, fichier d'échange, services utiles coupés, valeurs
   « magiques »…) et propose de désactiver les tâches planifiées d'autres éditeurs
@@ -82,7 +119,7 @@ annulable en un clic avec **« Tout annuler »**.
 
 ## Ce que LuKZyR Optimisation ne touche jamais
 
-- Windows Defender et la sécurité Windows
+- Windows Defender
 - Windows Update (le service d'Optimisation de la distribution n'est jamais désactivé)
 - Le Microsoft Store et les composants Xbox
 - Les pilotes : aucun pilote n'est supprimé, et l'appli n'installe ni ne fournit aucun
@@ -94,9 +131,8 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge `LuKZyR-Optimisation-v0.1-beta.zip` dans
-   [Releases](https://github.com/LuKZyR/LuKZyR-Optimisation/releases) et **dézippe tout
-   le dossier** (ne lance pas depuis le zip).
+1. Télécharge le [ZIP du build 5.21](downloads/LuKZyR-Optimisation-v0.1-beta-build-5.21.zip?raw=true)
+   et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.
 3. L'exe n'est pas signé : SmartScreen peut afficher un avertissement
@@ -105,9 +141,19 @@ les préférences dans `HKCU\Software\Lukzyr`.
 L'appli vérifie elle-même s'il existe une nouvelle version (fichier `version.json` de ce
 dépôt) et ne se met jamais à jour sans ton accord.
 
+### Publication d’un nouveau build
+
+1. Dépose le ZIP versionné dans `downloads/`.
+2. Ajoute une entrée par build dans le **Journal des mises à jour** avec les
+   ajouts, les corrections et les changements visibles. Mets à jour le lien
+   dans la section **Installation**.
+3. Renseigne le build, le lien HTTPS du ZIP, le résumé et l’empreinte SHA-256
+   dans `version.json`. Vérifie le téléchargement et son empreinte avant de
+   publier la mise à jour.
+
 ### Depuis les sources
 
-Le dépôt ne contient aucun exe ni DLL compilé. Pour les recréer avec le compilateur C# fourni
+Les sources ne contiennent aucun exe ni DLL compilé. Pour les recréer avec le compilateur C# fourni
 avec Windows (.NET Framework 4, rien à installer) :
 
 ```bat
@@ -126,6 +172,7 @@ assets\                   Logo et icône
 assets\source-lanceur\    Source C# du lanceur et de l'écran de chargement, Compiler-Lanceur.bat, logo d'origine
 guides\                   Guide BIOS générique
 docs\                     Captures d'écran
+downloads\                Archives ZIP versionnées
 version.json              Dernière version publiée (vérification des mises à jour)
 LISEZ-MOI.txt             Mode d'emploi détaillé (aussi fourni dans le zip)
 ```

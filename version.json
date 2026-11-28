@@ -1,7 +1,7 @@
 {
   "version": "0.1 bêta",
-  "build": "5.17",
-  "url": "https://github.com/LuKZyR/LuKZyR-Optimisation/releases/download/opti/LuKZyR-Optimisation-v0.1-beta.zip",
-  "notes": "v0.1 bêta (build 5.17) : détection matériel élargie (Intel hybride et Core Ultra, Ryzen / X3D / Threadripper / APU, GPU NVIDIA AMD Intel, VRAM > 4 Go, RAM soudée, disques NVMe/SATA/HDD/USB, cartes mères et PC de marque, machines virtuelles, ARM64). Correctifs du bouton Nettoyer et du résumé « traité(s) ».",
-  "sha256": "67e7d1da1452ef6bcb4a83b931a1d22f080405882aff01abc6e0a65e7a349f03"
+  "build": "5.21",
+  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/ece3df086592e3e2043090e4e1c8a028a5c69b9b/downloads/LuKZyR-Optimisation-v0.1-beta-build-5.21.zip",
+  "notes": "Le bouton Nettoyer des caches est centré sur son interrupteur. Performance rouvre toujours les réglages après un passage dans Session de jeu. Les 24 réglages sont regroupés par usage. L’Optimisation de la distribution se trouve dans Système > Réseau et VBS dans Système > Réparation et sécurité.",
+  "sha256": "97b3ee25a78025037e12c1b9a07398aaccc98603a0661c3a2967a405a185454e"
 }
