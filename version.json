@@ -1,7 +1,7 @@
 {
   "version": "0.2 bêta",
-  "build": "6.1",
-  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/a0d1e883c611d2988af0e3ef5d52c4ee14bf79c7/downloads/LuKZyR-Optimisation-v0.2-beta-build-6.1.zip",
-  "notes": "Relais du lanceur au premier rendu de la DLL, temps écoulé et indication des étapes longues. Recherche agrandie avec bouton d’effacement, résultats classés par pertinence, rubriques et navigation au clavier.",
-  "sha256": "519cc9ce8ca93f2ce41507de3b8a102914dfe5093a7312dec833a0dc0f21e3c5"
+  "build": "6.2",
+  "url": "https://raw.githubusercontent.com/LuKZyR/LuKZyR-Optimisation/b4c98650348d4da6a24cbf5f5c5e8176c63b2a78/downloads/LuKZyR-Optimisation-v0.2-beta-build-6.2.zip",
+  "notes": "Logo LuKZyR et identité commune dans la barre des tâches pour le lanceur, le chargement et la fenêtre principale.",
+  "sha256": "884e22cb7c4099c40c20c6e00262e52eeb1bb666fa8c7c4d1889f5022bd4a60a"
 }

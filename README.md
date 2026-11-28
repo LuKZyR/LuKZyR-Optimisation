@@ -14,105 +14,13 @@ annulable en un clic avec **« Tout annuler »**.
 > Journal > « Exporter le journal », puis signale-le sur le
 > [serveur Discord](https://discord.gg/2RrjqvC5vv) avec le fichier.
 
-## Journal des mises à jour
+## Notes de version
 
-### v0.2 bêta · build 6.1
+### v0.2 bêta · build 6.2
 
-- Le lanceur cède la place une fois la première image de la DLL dessinée.
-  Les deux fenêtres s’affichent au même endroit quand l’écran le permet.
-  Le temps écoulé reste continu et une étape longue est signalée.
-- Le champ de recherche a été agrandi. Il affiche **Ctrl+F** quand il est vide
-  et un bouton d’effacement pendant la saisie.
-- Le panneau de résultats affiche le nombre de correspondances et leur
-  rubrique. Il inclut des commandes comme **Rapport système** et des
-  paramètres comme **Animations réduites**. Utilise **↑** et **↓** pour
-  sélectionner un résultat, **Entrée** pour l’ouvrir et **Échap** pour fermer.
-
-### v0.2 bêta · build 6.0
-
-- Le lanceur et la DLL partagent le nouvel écran de chargement. La barre suit
-  les étapes réelles et chaque lancement attend son propre signal. L’écran
-  respecte les animations réduites et libère ses ressources à la fermeture.
-- Les transitions de page sont plus courtes. Un réglage qui désactive les
-  animations termine immédiatement les effets en cours.
-- **Performance → Effets visuels de Windows** propose deux options décochées
-  par défaut pour réduire les animations des fenêtres et de la barre des
-  tâches. Les réglages sont propres au compte, réversibles avec **Tout annuler**
-  et prennent effet à la prochaine connexion.
-- Le journal distingue les refus d’écriture de la transparence et de
-  l’Assistant de stockage. La vérification des mises à jour préserve une
-  version finale si le serveur propose une bêta du même numéro.
-
-### Build 5.24
-
-- La fenêtre de fin d’opération s’ajuste à la liste. Les longues listes défilent,
-  la durée s’affiche en secondes pour les opérations courtes et le journal
-  devient l’action principale en cas d’échec.
-- Le nettoyage direct des caches se termine avec **Fermer**. Les redémarrages
-  proposés pour les autres opérations demandent confirmation.
-- Le rapport système HTML s’ouvre sur une synthèse du matériel et propose un
-  sommaire cliquable, des sections adaptées aux petits écrans et une mise en
-  page d’impression. Le rapport texte est toujours exporté.
-- Les barrettes de mémoire sont distinguées même si Windows leur donne le
-  même nom d’emplacement.
-
-### Build 5.23
-
-- Les badges **Sûr**, **Avancé**, **Non réversible** et **Définitif** ont des
-  pictogrammes distincts, un libellé plus lisible et des couleurs propres à
-  chaque thème.
-- La navigation met en évidence la section active. Son icône est reprise dans
-  l’en-tête, et le contraste des cartes, des onglets et de la barre d’action
-  a été renforcé en mode clair et sombre.
-- Les interrupteurs actifs affichent une coche. Tab, Espace et Entrée
-  permettent de parcourir et d’activer les boutons, les onglets et les
-  interrupteurs, avec un contour visible au clavier.
-
-### Build 5.22
-
-- Le moteur passe à la tâche suivante dès que ses deux flux de sortie sont fermés.
-  Le journal traite les lignes par lots et chaque instance écrit dans son propre fichier.
-- La recherche dans les réglages réutilise les titres indexés et interprète
-  les caractères `*` et `?` tels qu’ils sont saisis.
-- L’application vérifie le nom et le numéro de séquence du nouveau point de
-  restauration. Elle rétablit la fréquence d’origine même si la création échoue
-  et interrompt l’opération si Windows refuse de la rétablir.
-- Les réparations préparent un fichier distinct pour chaque sélection au moment
-  du lancement. Un fichier manquant est signalé comme erreur.
-
-### Build 5.21
-
-- Le bouton **Nettoyer** des caches de shaders et de miniatures est aligné sur
-  son interrupteur, avec des marges qui suivent l’échelle d’affichage.
-- **Performance** ouvre la page **Réglages** même après un passage dans
-  **Session de jeu**.
-- Les 24 réglages sont regroupés par usage. **Nettoyage** sépare les fichiers et
-  caches, l’entretien de Windows, les applications et la confidentialité.
-  **Optimisation de la distribution** se trouve dans **Système → Réseau**.
-  **VBS / intégrité de la mémoire** se trouve dans **Système → Réparation et sécurité**.
-
-### Build 5.20
-
-- Une sauvegarde modifiée depuis sa lecture est protégée contre l’écrasement.
-- **Tout annuler** conserve les données nécessaires pour réessayer si Windows refuse
-  de restaurer le plan d’alimentation ou de supprimer le plan temporaire.
-- L’échec d’ouverture d’une page de pilote est signalé dans le journal.
-
-### Build 5.19
-
-- Ajout d’une option à confirmer dans **Nettoyage** pour désinstaller les éditions
-  reconnues de McAfee, Norton et ExpressVPN. Elle est décochée par défaut.
-
-### Build 5.18
-
-- Les échecs du point de restauration et de la sauvegarde préalable sont signalés.
-  Le mode console enregistre les réglages réversibles avant leur modification.
-- **Tout annuler** restaure le type de démarrage et l’état des services lorsque
-  ces données existent dans la sauvegarde.
-- Un JSON illisible bloque l’opération. Le remplacement de la sauvegarde conserve
-  la version précédente dans un fichier `.bak`.
-- La session de jeu conserve son état si le plan d’alimentation ne peut être
-  rétabli. Le téléchargement d’une mise à jour vérifie le format du ZIP.
+- La barre des tâches de Windows associe le logo **LuKZyR** au lanceur, à l’écran
+  de chargement et à la fenêtre principale. Un raccourci épinglé depuis
+  l’application relance le lanceur LuKZyR.
 
 ## Aperçu
 
@@ -126,12 +34,12 @@ annulable en un clic avec **« Tout annuler »**.
   <img src="docs/chargement.png" width="440" alt="Écran de chargement de LuKZyR Optimisation">
 </p>
 
-## Nouveautés
+## Interface et outils
 
-- **Nouvelle interface avec barre latérale** : logo, recherche (Ctrl+F) dans tous les
+- **Barre latérale** : logo, recherche (Ctrl+F) dans tous les
   réglages, une icône par section, encadré « Sauvegarde des réglages » avec le bouton
   « Tout annuler » toujours à portée de main.
-- **Tableau de bord refait** : état du PC, **score d'optimisation** sur 100 (calculé
+- **Tableau de bord** : état du PC, **score d'optimisation** sur 100 (calculé
   uniquement avec ce qui est lu sur ton PC, sans rien modifier, détail point par point),
   profils en 1 clic, 4 cartes en direct (processeur, carte graphique, mémoire, disque C:)
   avec courbe, accès rapide.
@@ -141,8 +49,6 @@ annulable en un clic avec **« Tout annuler »**.
   temporaires…), en lecture seule.
 - **Rapport système** : matériel, pilotes, Windows et réglages appliqués dans un fichier
   HTML + texte sur le Bureau. Rien n'est envoyé.
-- Interface plus fluide (changements de page sans saccade) et vérification des mises à
-  jour corrigée.
 
 ## Fonctionnalités
 
@@ -195,7 +101,7 @@ les préférences dans `HKCU\Software\Lukzyr`.
 
 ## Installation
 
-1. Télécharge le [ZIP de la v0.2 bêta, build 6.1](downloads/LuKZyR-Optimisation-v0.2-beta-build-6.1.zip?raw=true)
+1. Télécharge le [ZIP de la v0.2 bêta, build 6.2](downloads/LuKZyR-Optimisation-v0.2-beta-build-6.2.zip?raw=true)
    et **dézippe tout le dossier**.
 2. Double-clique sur l'exe à la racine du dossier (ou, en secours, sur le
    fichier .bat « LANCER ») et accepte la demande administrateur.
@@ -208,9 +114,9 @@ dépôt) et ne se met jamais à jour sans ton accord.
 ### Publication d’un nouveau build
 
 1. Dépose le ZIP versionné dans `downloads/`.
-2. Ajoute une entrée par build dans le **Journal des mises à jour** avec les
-   ajouts, les corrections et les changements visibles. Mets à jour le lien
-   dans la section **Installation**.
+2. Remplace les **Notes de version** de ce README et de `LISEZ-MOI.txt` par
+   celles du build publié. Mets le numéro public, le build et les changements
+   dans chaque note, puis actualise le lien de la section **Installation**.
 3. Renseigne le build, le lien HTTPS du ZIP, le résumé et l’empreinte SHA-256
    dans `version.json`. Vérifie le téléchargement et son empreinte avant de
    publier la mise à jour.
